@@ -1,4 +1,5 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::RwLock;
 
 use axum::Router;
 use tower_http::services::ServeDir;
@@ -62,7 +63,6 @@ async fn main() -> anyhow::Result<()> {
     for srv in servers.iter().filter(|s| s.is_active) {
         match registry
             .write()
-            .unwrap()
             .start_server(srv.id, &srv.api_url, &srv.api_key, &srv.server_id)
         {
             Ok(_) => tracing::info!("Connected to PDNS server '{}'", srv.name),

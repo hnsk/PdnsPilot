@@ -4,7 +4,7 @@
 <div class="page-header">
     <h1>Zones</h1>
     {% if user.role == 'admin' %}
-    <button class="btn btn-primary" onclick="document.getElementById('create-zone-modal').style.display='flex'">+ New Zone</button>
+    <button class="btn btn-primary" x-data @click="document.getElementById('create-zone-modal').style.display='flex'">+ New Zone</button>
     {% endif %}
 </div>
 
@@ -99,10 +99,10 @@ var isAdmin = {{ user.role == 'admin' | tojson }};
                                 </template>
                                 <template x-if="isAdmin">
                                     <button class="btn btn-danger btn-sm"
-                                        @click="if(confirm('Delete zone ' + z.name + '?')) {
+                                        @click="showConfirm('Delete zone ' + z.name + '?', () => {
                                             fetch('/api/zones/' + z.name + '?server_id=' + z._server_id, {method:'DELETE'})
-                                                .then(r => { if(r.ok) location.reload(); else r.json().then(d => alert(d.detail || 'Error')); });
-                                        }">Delete</button>
+                                                .then(r => { if(r.ok) location.reload(); else r.json().then(d => showToast(d.detail || 'Error', 'error')); });
+                                        })">Delete</button>
                                 </template>
                             </div>
                         </td>
@@ -154,7 +154,7 @@ var zoneTemplateData = {
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
             <span>Create Zone</span>
-            <button class="btn btn-sm" onclick="this.closest('.modal-overlay').style.display='none'">&times;</button>
+            <button class="btn btn-sm" @click="$el.closest('.modal-overlay').style.display='none'">&times;</button>
         </div>
         <form @submit.prevent="
             loading = true; error = '';
@@ -251,7 +251,7 @@ var zoneTemplateData = {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn" onclick="this.closest('.modal-overlay').style.display='none'">Cancel</button>
+                <button type="button" class="btn" @click="$el.closest('.modal-overlay').style.display='none'">Cancel</button>
                 <button type="submit" class="btn btn-primary" :disabled="loading">
                     <span x-show="!loading">Create Zone</span>
                     <span x-show="loading">Creating...</span>

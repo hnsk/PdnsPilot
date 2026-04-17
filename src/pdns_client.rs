@@ -322,21 +322,6 @@ impl PdnsClient {
         })
     }
 
-    pub async fn get_metadata(&self, zone_id: &str, kind: &str) -> Result<Value, PdnsError> {
-        let resp = self
-            .request(
-                reqwest::Method::GET,
-                &format!("/zones/{zone_id}/metadata/{kind}"),
-                None,
-                None,
-            )
-            .await?;
-        resp.json().await.map_err(|e| PdnsError {
-            status: 500,
-            detail: e.to_string(),
-        })
-    }
-
     pub async fn set_metadata(
         &self,
         zone_id: &str,
@@ -347,17 +332,6 @@ impl PdnsClient {
             reqwest::Method::PUT,
             &format!("/zones/{zone_id}/metadata/{kind}"),
             Some(serde_json::json!({"metadata": value})),
-            None,
-        )
-        .await?;
-        Ok(())
-    }
-
-    pub async fn delete_metadata(&self, zone_id: &str, kind: &str) -> Result<(), PdnsError> {
-        self.request(
-            reqwest::Method::DELETE,
-            &format!("/zones/{zone_id}/metadata/{kind}"),
-            None,
             None,
         )
         .await?;
@@ -383,17 +357,6 @@ impl PdnsClient {
         })
     }
 
-    // ─── TSIG Keys ───────────────────────────────────────────────────────────
-
-    pub async fn list_tsig_keys(&self) -> Result<Value, PdnsError> {
-        let resp = self
-            .request(reqwest::Method::GET, "/tsigkeys", None, None)
-            .await?;
-        resp.json().await.map_err(|e| PdnsError {
-            status: 500,
-            detail: e.to_string(),
-        })
-    }
 }
 
 // ─── Registry ────────────────────────────────────────────────────────────────

@@ -458,49 +458,50 @@ function zoneDetail() {
             }
         },
 
-        async deleteRecord(rrset, ri) {
-            if (!confirm('Delete this record?')) return;
-            const remaining = rrset.records.filter((_, i) => i !== ri);
-            const payload = [{
-                name: rrset.name,
-                type: rrset.type,
-                ttl: rrset.ttl,
-                changetype: remaining.length > 0 ? 'REPLACE' : 'DELETE',
-                records: remaining.map(r => ({ content: r.content, disabled: r.disabled }))
-            }];
-            const r = await fetch(apiUrl(`/api/zones/${zoneName}/rrsets`), {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (r.ok) location.reload();
-            else r.json().then(d => showToast(d.detail || 'Error', 'error'));
-        },
-
-        async bulkDelete() {
-            if (!confirm(`Delete ${this.selected.length} selected record(s)?`)) return;
-            // Group selected records by rrset, compute remaining
-            const patches = [];
-            for (const rs of this.rrsets) {
-                const selIdx = rs.records.reduce((acc, _, i) => {
-                    if (this.selected.includes(this.recKey(rs, i))) acc.push(i);
-                    return acc;
-                }, []);
-                if (selIdx.length === 0) continue;
-                const remaining = rs.records.filter((_, i) => !selIdx.includes(i));
-                patches.push({
-                    name: rs.name, type: rs.type, ttl: rs.ttl,
+        deleteRecord(rrset, ri) {
+            showConfirm('Delete this record?', async () => {
+                const remaining = rrset.records.filter((_, i) => i !== ri);
+                const payload = [{
+                    name: rrset.name,
+                    type: rrset.type,
+                    ttl: rrset.ttl,
                     changetype: remaining.length > 0 ? 'REPLACE' : 'DELETE',
                     records: remaining.map(r => ({ content: r.content, disabled: r.disabled }))
+                }];
+                const r = await fetch(apiUrl(`/api/zones/${zoneName}/rrsets`), {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
-            }
-            const r = await fetch(apiUrl(`/api/zones/${zoneName}/rrsets`), {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(patches)
+                if (r.ok) location.reload();
+                else r.json().then(d => showToast(d.detail || 'Error', 'error'));
             });
-            if (r.ok) location.reload();
-            else r.json().then(d => showToast(d.detail || 'Error', 'error'));
+        },
+
+        bulkDelete() {
+            showConfirm(`Delete ${this.selected.length} selected record(s)?`, async () => {
+                const patches = [];
+                for (const rs of this.rrsets) {
+                    const selIdx = rs.records.reduce((acc, _, i) => {
+                        if (this.selected.includes(this.recKey(rs, i))) acc.push(i);
+                        return acc;
+                    }, []);
+                    if (selIdx.length === 0) continue;
+                    const remaining = rs.records.filter((_, i) => !selIdx.includes(i));
+                    patches.push({
+                        name: rs.name, type: rs.type, ttl: rs.ttl,
+                        changetype: remaining.length > 0 ? 'REPLACE' : 'DELETE',
+                        records: remaining.map(r => ({ content: r.content, disabled: r.disabled }))
+                    });
+                }
+                const r = await fetch(apiUrl(`/api/zones/${zoneName}/rrsets`), {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(patches)
+                });
+                if (r.ok) location.reload();
+                else r.json().then(d => showToast(d.detail || 'Error', 'error'));
+            });
         },
 
         async bulkSetDisabled(disabled) {

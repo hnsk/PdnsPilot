@@ -105,7 +105,7 @@ async fn user_detail(
         .collect();
 
     let clients: Vec<_> = {
-        let registry = state.pdns.read().unwrap();
+        let registry = state.pdns.read();
         active_servers.iter().map(|srv| (srv.id, srv.name.clone(), registry.get(srv.id))).collect()
     };
     let mut servers_with_zones = Vec::new();

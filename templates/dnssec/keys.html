@@ -8,11 +8,11 @@
         {% if not dnssec_enabled %}
         <button class="btn btn-success" @click="
             fetch('/api/zones/{{ zone_id }}/dnssec/enable', {method:'POST'}).then(r => {
-                if(r.ok) location.reload(); else r.json().then(d => alert(d.detail));
+                if(r.ok) location.reload(); else r.json().then(d => showToast(d.detail, 'error'));
             })
         " x-data>Enable DNSSEC</button>
         {% else %}
-        <button class="btn btn-primary" onclick="document.getElementById('add-key-modal').style.display='flex'">+ Add Key</button>
+        <button class="btn btn-primary" x-data @click="document.getElementById('add-key-modal').style.display='flex'">+ Add Key</button>
         {% endif %}
     </div>
 </div>
@@ -68,13 +68,13 @@
                     {% if key.active %}
                     <button class="btn btn-sm" @click="
                         fetch('/api/zones/{{ zone_id }}/cryptokeys/{{ key.id }}?active=false', {method:'PUT'}).then(r => {
-                            if(r.ok) location.reload(); else r.json().then(d => alert(d.detail));
+                            if(r.ok) location.reload(); else r.json().then(d => showToast(d.detail, 'error'));
                         })
                     ">Deactivate</button>
                     {% else %}
                     <button class="btn btn-primary btn-sm" @click="
                         fetch('/api/zones/{{ zone_id }}/cryptokeys/{{ key.id }}?active=true', {method:'PUT'}).then(r => {
-                            if(r.ok) location.reload(); else r.json().then(d => alert(d.detail));
+                            if(r.ok) location.reload(); else r.json().then(d => showToast(d.detail, 'error'));
                         })
                     ">Activate</button>
                     {% endif %}
@@ -83,15 +83,15 @@
                             let info = 'Key Tag: ' + (d.keytag||'-') + '\n';
                             if(d.ds) info += '\nDS Records:\n' + d.ds.join('\n');
                             if(d.dnskey) info += '\n\nDNSKEY:\n' + d.dnskey;
-                            alert(info);
+                            showInfo('DS/DNSKEY Info', info);
                         })
                     ">DS/DNSKEY</button>
                     <button class="btn btn-danger btn-sm" @click="
-                        if(confirm('Delete this key?')) {
+                        showConfirm('Delete this key?', () => {
                             fetch('/api/zones/{{ zone_id }}/cryptokeys/{{ key.id }}', {method:'DELETE'}).then(r => {
-                                if(r.ok) location.reload(); else r.json().then(d => alert(d.detail));
+                                if(r.ok) location.reload(); else r.json().then(d => showToast(d.detail, 'error'));
                             });
-                        }
+                        })
                     ">Delete</button>
                 </div>
             </td>
@@ -129,11 +129,11 @@
     <div class="card-header">Danger Zone</div>
     <div class="card-body" x-data>
         <button class="btn btn-danger" @click="
-            if(confirm('Disable DNSSEC for this zone? All keys will remain but signing will stop.')) {
+            showConfirm('Disable DNSSEC for this zone? All keys will remain but signing will stop.', () => {
                 fetch('/api/zones/{{ zone_id }}/dnssec/disable', {method:'POST'}).then(r => {
-                    if(r.ok) location.reload(); else r.json().then(d => alert(d.detail));
+                    if(r.ok) location.reload(); else r.json().then(d => showToast(d.detail, 'error'));
                 });
-            }
+            })
         ">Disable DNSSEC</button>
     </div>
 </div>
@@ -144,7 +144,7 @@
     <div class="modal">
         <div class="modal-header">
             <span>Add Cryptokey</span>
-            <button class="btn btn-sm" onclick="this.closest('.modal-overlay').style.display='none'">&times;</button>
+            <button class="btn btn-sm" @click="$el.closest('.modal-overlay').style.display='none'">&times;</button>
         </div>
         <form @submit.prevent="
             loading = true; error = '';
@@ -184,7 +184,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn" onclick="this.closest('.modal-overlay').style.display='none'">Cancel</button>
+                <button type="button" class="btn" @click="$el.closest('.modal-overlay').style.display='none'">Cancel</button>
                 <button type="submit" class="btn btn-primary" :disabled="loading">
                     <span x-show="!loading">Create Key</span>
                     <span x-show="loading">Creating...</span>

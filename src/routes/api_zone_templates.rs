@@ -75,15 +75,17 @@ async fn create_template(
     }
     let tmpl = zone_template_repo::create_template(
         &state.db,
-        &name,
-        &body.nameservers,
-        &body.soa_mname,
-        &body.soa_rname,
-        body.soa_refresh,
-        body.soa_retry,
-        body.soa_expire,
-        body.soa_ttl,
-        body.is_default,
+        zone_template_repo::TemplateData {
+            name: &name,
+            nameservers: &body.nameservers,
+            soa_mname: &body.soa_mname,
+            soa_rname: &body.soa_rname,
+            soa_refresh: body.soa_refresh,
+            soa_retry: body.soa_retry,
+            soa_expire: body.soa_expire,
+            soa_ttl: body.soa_ttl,
+            is_default: body.is_default,
+        },
     )
     .await
     .map_err(|e| {
@@ -124,15 +126,17 @@ async fn update_template(
     let tmpl = zone_template_repo::update_template(
         &state.db,
         template_id,
-        &name,
-        &body.nameservers,
-        &body.soa_mname,
-        &body.soa_rname,
-        body.soa_refresh,
-        body.soa_retry,
-        body.soa_expire,
-        body.soa_ttl,
-        body.is_default,
+        zone_template_repo::TemplateData {
+            name: &name,
+            nameservers: &body.nameservers,
+            soa_mname: &body.soa_mname,
+            soa_rname: &body.soa_rname,
+            soa_refresh: body.soa_refresh,
+            soa_retry: body.soa_retry,
+            soa_expire: body.soa_expire,
+            soa_ttl: body.soa_ttl,
+            is_default: body.is_default,
+        },
     )
     .await
     .map_err(|e| {

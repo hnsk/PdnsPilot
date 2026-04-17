@@ -57,7 +57,6 @@ fn get_pdns_client(
     state
         .pdns
         .read()
-        .unwrap()
         .get(server_id)
         .ok_or_else(|| AppError::ServiceUnavailable(format!("Server '{server_name}' not connected")))
 }
@@ -103,7 +102,7 @@ async fn list_zones(
     let active: Vec<_> = servers.into_iter().filter(|s| s.is_active).collect();
 
     let clients: Vec<_> = {
-        let registry = state.pdns.read().unwrap();
+        let registry = state.pdns.read();
         active.iter().filter_map(|srv| {
             registry.get(srv.id).map(|c| (srv.id, srv.name.clone(), c))
         }).collect()
@@ -121,12 +120,12 @@ async fn list_zones(
                             .and_then(|v| v.as_str())
                             .unwrap_or_default()
                             .to_string();
-                        if !seen.contains_key(&name) {
+                        seen.entry(name).or_insert_with(|| {
                             let mut z = z.clone();
                             z["_server_id"] = json!(srv_id);
                             z["_server_name"] = json!(srv_name);
-                            seen.insert(name, z);
-                        }
+                            z
+                        });
                     }
                 }
             }
@@ -161,16 +160,19 @@ async fn list_zones(
     Ok(Json(json!(filtered)))
 }
 
-fn build_zone_rrsets(
-    zone_fqdn: &str,
-    nameservers: &[String],
-    soa_mname: &str,
-    soa_rname: &str,
+struct ZoneRRSetsParams<'a> {
+    zone_fqdn: &'a str,
+    nameservers: &'a [String],
+    soa_mname: &'a str,
+    soa_rname: &'a str,
     soa_refresh: i64,
     soa_retry: i64,
     soa_expire: i64,
     soa_ttl: i64,
-) -> Vec<Value> {
+}
+
+fn build_zone_rrsets(p: ZoneRRSetsParams<'_>) -> Vec<Value> {
+    let ZoneRRSetsParams { zone_fqdn, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl } = p;
     let ns_list: Vec<String> = nameservers
         .iter()
         .map(|ns| {
@@ -250,28 +252,28 @@ async fn create_zone(
                 .await
                 .map_err(AppError::Internal)?
                 .ok_or_else(|| AppError::NotFound("Zone template not found".into()))?;
-            let rs = build_zone_rrsets(
-                &zone_fqdn,
-                &tmpl.nameservers,
-                &tmpl.soa_mname,
-                &tmpl.soa_rname,
-                tmpl.soa_refresh,
-                tmpl.soa_retry,
-                tmpl.soa_expire,
-                tmpl.soa_ttl,
-            );
+            let rs = build_zone_rrsets(ZoneRRSetsParams {
+                zone_fqdn: &zone_fqdn,
+                nameservers: &tmpl.nameservers,
+                soa_mname: &tmpl.soa_mname,
+                soa_rname: &tmpl.soa_rname,
+                soa_refresh: tmpl.soa_refresh,
+                soa_retry: tmpl.soa_retry,
+                soa_expire: tmpl.soa_expire,
+                soa_ttl: tmpl.soa_ttl,
+            });
             (vec![], Some(rs), Some(tmpl.name))
         } else if let (Some(mname), Some(rname)) = (&body.soa_mname, &body.soa_rname) {
-            let rs = build_zone_rrsets(
-                &zone_fqdn,
-                &body.nameservers,
-                mname,
-                rname,
-                body.soa_refresh.unwrap_or(3600),
-                body.soa_retry.unwrap_or(900),
-                body.soa_expire.unwrap_or(604800),
-                body.soa_ttl.unwrap_or(300),
-            );
+            let rs = build_zone_rrsets(ZoneRRSetsParams {
+                zone_fqdn: &zone_fqdn,
+                nameservers: &body.nameservers,
+                soa_mname: mname,
+                soa_rname: rname,
+                soa_refresh: body.soa_refresh.unwrap_or(3600),
+                soa_retry: body.soa_retry.unwrap_or(900),
+                soa_expire: body.soa_expire.unwrap_or(604800),
+                soa_ttl: body.soa_ttl.unwrap_or(300),
+            });
             (vec![], Some(rs), None)
         } else {
             (body.nameservers.clone(), None, None)

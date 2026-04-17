@@ -221,7 +221,11 @@ function generalSettings() {
         init() {},
 
         flash(msg, type) {
-            document.getElementById('general-flash').innerHTML = `<div class="flash flash-${type}">${msg}</div>`;
+            const el = document.getElementById('general-flash');
+            const div = document.createElement('div');
+            div.className = `flash flash-${type}`;
+            div.textContent = msg;
+            el.replaceChildren(div);
         },
 
         async save() {
@@ -275,7 +279,11 @@ function pdnsServers() {
         cancelForm() { this.showForm = false; this.editId = null; },
 
         flash(msg, type) {
-            document.getElementById('srv-flash').innerHTML = `<div class="flash flash-${type}">${msg}</div>`;
+            const el = document.getElementById('srv-flash');
+            const div = document.createElement('div');
+            div.className = `flash flash-${type}`;
+            div.textContent = msg;
+            el.replaceChildren(div);
         },
 
         async saveServer() {
@@ -320,35 +328,37 @@ function pdnsServers() {
             const resp = await fetch(`/api/pdns-servers/${id}/test`, { method: 'POST' });
             if (resp.ok) {
                 const data = await resp.json();
-                alert(`Connection OK — ${data.detail}`);
+                this.flash(`Connection OK — ${data.detail}`, 'success');
             } else {
                 const err = await resp.json().catch(() => ({detail: 'Connection failed'}));
-                alert(err.detail);
+                this.flash(err.detail, 'error');
             }
         },
 
-        async deleteServer(s) {
-            if (!confirm(`Delete server "${s.name}"?`)) return;
-            const resp = await fetch(`/api/pdns-servers/${s.id}`, { method: 'DELETE' });
-            if (resp.ok) {
-                this.servers = this.servers.filter(x => x.id !== s.id);
-            } else if (resp.status === 409) {
-                const err = await resp.json();
-                const detail = err.detail || {};
-                const zones = detail.zones || [];
-                if (confirm(`Server "${s.name}" has ${zones.length} mapped zone(s):\n${zones.slice(0, 10).join('\n')}${zones.length > 10 ? '\n…' : ''}\n\nDelete and remove all zone mappings?`)) {
-                    const r2 = await fetch(`/api/pdns-servers/${s.id}?cascade=true`, { method: 'DELETE' });
-                    if (r2.ok) {
-                        this.servers = this.servers.filter(x => x.id !== s.id);
-                    } else {
-                        const e2 = await r2.json().catch(() => ({detail: 'Delete failed'}));
-                        alert(e2.detail);
-                    }
+        deleteServer(s) {
+            showConfirm(`Delete server "${s.name}"?`, async () => {
+                const resp = await fetch(`/api/pdns-servers/${s.id}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    this.servers = this.servers.filter(x => x.id !== s.id);
+                } else if (resp.status === 409) {
+                    const err = await resp.json();
+                    const detail = err.detail || {};
+                    const zones = detail.zones || [];
+                    const zoneList = zones.slice(0, 10).join('\n') + (zones.length > 10 ? '\n…' : '');
+                    showConfirm(`Server "${s.name}" has ${zones.length} mapped zone(s):\n${zoneList}\n\nDelete and remove all zone mappings?`, async () => {
+                        const r2 = await fetch(`/api/pdns-servers/${s.id}?cascade=true`, { method: 'DELETE' });
+                        if (r2.ok) {
+                            this.servers = this.servers.filter(x => x.id !== s.id);
+                        } else {
+                            const e2 = await r2.json().catch(() => ({detail: 'Delete failed'}));
+                            this.flash(e2.detail, 'error');
+                        }
+                    });
+                } else {
+                    const err = await resp.json().catch(() => ({detail: 'Delete failed'}));
+                    this.flash(err.detail, 'error');
                 }
-            } else {
-                const err = await resp.json().catch(() => ({detail: 'Delete failed'}));
-                alert(err.detail);
-            }
+            });
         },
     };
 }
@@ -420,7 +430,10 @@ function zoneTemplates() {
                 this.cancelForm();
             } else {
                 const err = await resp.json().catch(() => ({detail: 'Save failed'}));
-                flash.innerHTML = `<div class="flash flash-error">${err.detail}</div>`;
+                const errDiv = document.createElement('div');
+                errDiv.className = 'flash flash-error';
+                errDiv.textContent = err.detail;
+                flash.replaceChildren(errDiv);
             }
         },
 

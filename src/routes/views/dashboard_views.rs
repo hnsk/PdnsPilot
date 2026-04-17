@@ -42,7 +42,7 @@ async fn dashboard(State(state): State<AppState>, jar: CookieJar) -> Response {
     let mut server_infos = Vec::new();
 
     let clients: Vec<_> = {
-        let registry = state.pdns.read().unwrap();
+        let registry = state.pdns.read();
         active_servers.iter().map(|srv| {
             (srv.name.clone(), registry.get(srv.id))
         }).collect()

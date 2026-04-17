@@ -202,6 +202,27 @@
     </div>
 
     <div id="toast"></div>
+
+    <div id="confirm-modal" class="modal-overlay" style="display:none">
+        <div class="modal" style="max-width:420px">
+            <div class="modal-body" id="confirm-msg" style="white-space:pre-wrap"></div>
+            <div class="modal-footer">
+                <button class="btn" id="confirm-cancel">Cancel</button>
+                <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-modal" class="modal-overlay" style="display:none">
+        <div class="modal">
+            <div class="modal-header">
+                <span id="info-title"></span>
+                <button class="btn btn-sm" id="info-close">&times;</button>
+            </div>
+            <div class="modal-body"><pre id="info-content" style="white-space:pre-wrap;word-break:break-all;margin:0;font-size:.85rem"></pre></div>
+        </div>
+    </div>
+
     <script>
     function showToast(msg, type) {
         type = type || 'success';
@@ -215,6 +236,27 @@
             el.classList.remove('show');
             setTimeout(function() { el.remove(); }, 250);
         }, 3000);
+    }
+    function showConfirm(msg, onConfirm) {
+        var overlay = document.getElementById('confirm-modal');
+        document.getElementById('confirm-msg').textContent = msg;
+        overlay.style.display = 'flex';
+        document.getElementById('confirm-ok').onclick = function() {
+            overlay.style.display = 'none';
+            onConfirm();
+        };
+        document.getElementById('confirm-cancel').onclick = function() {
+            overlay.style.display = 'none';
+        };
+    }
+    function showInfo(title, content) {
+        var overlay = document.getElementById('info-modal');
+        document.getElementById('info-title').textContent = title;
+        document.getElementById('info-content').textContent = content;
+        overlay.style.display = 'flex';
+        document.getElementById('info-close').onclick = function() {
+            overlay.style.display = 'none';
+        };
     }
     </script>
 </body>

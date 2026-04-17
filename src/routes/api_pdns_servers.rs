@@ -91,11 +91,9 @@ async fn create_server(
     )
     .await
     .map_err(|e| {
-        if let Some(db_err) = e.downcast_ref::<sqlx::Error>() {
-            if let sqlx::Error::Database(db_err) = db_err {
-                if db_err.message().contains("UNIQUE constraint failed") {
-                    return AppError::Conflict("A server with that name already exists".into());
-                }
+        if let Some(sqlx::Error::Database(db_err)) = e.downcast_ref::<sqlx::Error>() {
+            if db_err.message().contains("UNIQUE constraint failed") {
+                return AppError::Conflict("A server with that name already exists".into());
             }
         }
         AppError::Internal(e)
@@ -105,7 +103,6 @@ async fn create_server(
     if let Err(e) = state
         .pdns
         .write()
-        .unwrap()
         .start_server(srv.id, &srv.api_url, &srv.api_key, &srv.server_id)
     {
         tracing::warn!("Failed to connect to {}: {}", srv.name, e);
@@ -168,7 +165,7 @@ async fn update_server(
     .ok_or_else(|| AppError::NotFound("Server not found after update".into()))?;
 
     if body.is_active {
-        if let Err(e) = state.pdns.write().unwrap().reconfigure_server(
+        if let Err(e) = state.pdns.write().reconfigure_server(
             server_id,
             &srv.api_url,
             &srv.api_key,
@@ -177,7 +174,7 @@ async fn update_server(
             tracing::warn!("Failed to reconfigure {}: {}", srv.name, e);
         }
     } else {
-        state.pdns.write().unwrap().stop_server(server_id);
+        state.pdns.write().stop_server(server_id);
     }
 
     audit_repo::log_action(
@@ -238,7 +235,7 @@ async fn delete_server(
     pdns_server_repo::delete_server(&state.db, server_id)
         .await
         .map_err(AppError::Internal)?;
-    state.pdns.write().unwrap().stop_server(server_id);
+    state.pdns.write().stop_server(server_id);
 
     audit_repo::log_action(
         &state.db,

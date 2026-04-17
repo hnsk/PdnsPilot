@@ -446,12 +446,12 @@ function toolsPage() {
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    alert(data.detail || 'Request failed');
+                    showToast(data.detail || 'Request failed', 'error');
                 } else {
                     this.results = data.results;
                 }
             } catch (e) {
-                alert('Network error: ' + e.message);
+                showToast('Network error: ' + e.message, 'error');
             } finally {
                 this.loading = false;
             }
@@ -474,12 +474,12 @@ function toolsPage() {
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    alert(data.detail || 'Request failed');
+                    showToast(data.detail || 'Request failed', 'error');
                 } else {
                     this.results = data.results;
                 }
             } catch (e) {
-                alert('Network error: ' + e.message);
+                showToast('Network error: ' + e.message, 'error');
             } finally {
                 this.loading = false;
             }

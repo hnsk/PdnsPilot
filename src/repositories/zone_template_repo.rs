@@ -101,44 +101,20 @@ pub async fn get_template(
     }))
 }
 
-#[allow(dead_code)]
-pub async fn get_default_template(db: &SqlitePool) -> anyhow::Result<Option<ZoneTemplate>> {
-    let row = sqlx::query!(
-        "SELECT id, name, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, \
-         soa_expire, soa_ttl, is_default, created_at \
-         FROM zone_templates WHERE is_default = 1 LIMIT 1"
-    )
-    .fetch_optional(db)
-    .await?;
-    Ok(row.map(|r| {
-        parse_template(
-            r.id,
-            r.name,
-            r.nameservers,
-            r.soa_mname,
-            r.soa_rname,
-            r.soa_refresh,
-            r.soa_retry,
-            r.soa_expire,
-            r.soa_ttl,
-            r.is_default,
-            r.created_at,
-        )
-    }))
+pub struct TemplateData<'a> {
+    pub name: &'a str,
+    pub nameservers: &'a [String],
+    pub soa_mname: &'a str,
+    pub soa_rname: &'a str,
+    pub soa_refresh: i64,
+    pub soa_retry: i64,
+    pub soa_expire: i64,
+    pub soa_ttl: i64,
+    pub is_default: bool,
 }
 
-pub async fn create_template(
-    db: &SqlitePool,
-    name: &str,
-    nameservers: &[String],
-    soa_mname: &str,
-    soa_rname: &str,
-    soa_refresh: i64,
-    soa_retry: i64,
-    soa_expire: i64,
-    soa_ttl: i64,
-    is_default: bool,
-) -> anyhow::Result<ZoneTemplate> {
+pub async fn create_template(db: &SqlitePool, data: TemplateData<'_>) -> anyhow::Result<ZoneTemplate> {
+    let TemplateData { name, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl, is_default } = data;
     if is_default {
         sqlx::query!("UPDATE zone_templates SET is_default = 0")
             .execute(db)
@@ -173,16 +149,9 @@ pub async fn create_template(
 pub async fn update_template(
     db: &SqlitePool,
     template_id: i64,
-    name: &str,
-    nameservers: &[String],
-    soa_mname: &str,
-    soa_rname: &str,
-    soa_refresh: i64,
-    soa_retry: i64,
-    soa_expire: i64,
-    soa_ttl: i64,
-    is_default: bool,
+    data: TemplateData<'_>,
 ) -> anyhow::Result<Option<ZoneTemplate>> {
+    let TemplateData { name, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl, is_default } = data;
     if is_default {
         sqlx::query!("UPDATE zone_templates SET is_default = 0")
             .execute(db)

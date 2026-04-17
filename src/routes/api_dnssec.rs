@@ -59,7 +59,6 @@ async fn resolve_client(
     state
         .pdns
         .read()
-        .unwrap()
         .get(srv.id)
         .ok_or_else(|| AppError::ServiceUnavailable(format!("Server '{}' not connected", srv.name)))
 }

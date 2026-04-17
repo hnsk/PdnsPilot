@@ -46,7 +46,7 @@ async fn get_metrics_overview(
                 "dnssec_count": 0,
                 "uptime": null,
             });
-            let client = state.pdns.read().unwrap().get(srv.id);
+            let client = state.pdns.read().get(srv.id);
             if let Some(client) = client {
                 if let (Ok(info), Ok(zones)) =
                     tokio::join!(client.get_server_info(), client.list_zones(None))
@@ -87,7 +87,6 @@ async fn get_server_metrics(
     let client = state
         .pdns
         .read()
-        .unwrap()
         .get(server_db_id)
         .ok_or_else(|| AppError::ServiceUnavailable(format!("Server '{}' not connected", srv.name)))?;
 
@@ -132,7 +131,7 @@ async fn handle_ws_all(mut socket: WebSocket, state: AppState, jar: CookieJar) {
             let srv_id = srv.id;
             let srv_name = srv.name.clone();
             tasks.push(tokio::spawn(async move {
-                let client = { state_clone.pdns.read().unwrap().get(srv_id) };
+                let client = { state_clone.pdns.read().get(srv_id) };
                 if let Some(client) = client {
                     match tokio::join!(client.get_server_info(), client.get_statistics()) {
                         (Ok(_info), Ok(stats)) => json!({
@@ -238,7 +237,7 @@ async fn handle_ws(mut socket: WebSocket, state: AppState, server_db_id: i64, ja
         }
     };
 
-    let client = { state.pdns.read().unwrap().get(server_db_id) };
+    let client = { state.pdns.read().get(server_db_id) };
     let client = match client {
         Some(c) => c,
         None => {

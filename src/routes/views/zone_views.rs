@@ -65,7 +65,7 @@ async fn zones_list(State(state): State<AppState>, jar: CookieJar) -> Response {
     let active_servers: Vec<_> = servers.into_iter().filter(|s| s.is_active).collect();
 
     let clients: Vec<_> = {
-        let registry = state.pdns.read().unwrap();
+        let registry = state.pdns.read();
         active_servers.iter().map(|srv| (srv.id, srv.name.clone(), registry.get(srv.id))).collect()
     };
 
@@ -168,7 +168,7 @@ async fn zone_detail(
         None => return redirect("/zones"),
     };
 
-    let client = { state.pdns.read().unwrap().get(srv.id) };
+    let client = { state.pdns.read().get(srv.id) };
     let client = match client {
         Some(c) => c,
         None => return redirect("/zones"),
@@ -232,7 +232,7 @@ async fn zone_export(
     };
 
     let export_data = if let Some(s) = srv {
-        let client = { state.pdns.read().unwrap().get(s.id) };
+        let client = { state.pdns.read().get(s.id) };
         if let Some(client) = client {
             client.export_zone(&zone_id).await.unwrap_or_else(|_| "Failed to export zone".into())
         } else {
@@ -282,7 +282,7 @@ async fn zone_dnssec(
         None => return redirect("/zones"),
     };
 
-    let client = { state.pdns.read().unwrap().get(srv.id) };
+    let client = { state.pdns.read().get(srv.id) };
     let client = match client {
         Some(c) => c,
         None => return redirect("/zones"),
