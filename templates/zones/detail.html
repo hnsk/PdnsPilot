@@ -6,13 +6,14 @@
         <h1 class="mono">{{ zone.name }}</h1>
         <div class="text-dim text-sm mt-1">
             <span class="badge badge-blue">{{ zone.kind }}</span>
+            {% if network %}<span class="mono" style="margin-left: 0.5rem;">{{ network }}</span>{% endif %}
             <span style="margin-left: 0.5rem;">Serial: {{ zone.serial }}</span>
             <span style="margin-left: 0.5rem;">Server: {{ server_name }}</span>
             {% if zone.dnssec %}<span class="badge badge-green" style="margin-left: 0.5rem;">DNSSEC</span>{% endif %}
         </div>
     </div>
     <div class="btn-group">
-        <a href="/zones" class="btn">&larr; Zones</a>
+        <a href="{% if is_reverse_zone %}/reverse-zones{% else %}/zones{% endif %}" class="btn">&larr; {% if is_reverse_zone %}Reverse Zones{% else %}Zones{% endif %}</a>
         {% if user.role == 'admin' %}
         <a href="/zones/{{ zone.name }}/dnssec?server_id={{ server_id }}" class="btn">DNSSEC</a>
         <a href="/zones/{{ zone.name }}/export?server_id={{ server_id }}" class="btn">Export</a>
@@ -41,7 +42,7 @@
     </div>
 </div>
 
-<div x-data="zoneDetail()" x-init="init()" @keydown.escape.window="if(selected.length > 0) clearSelection()">
+<div x-data="zoneDetail()" x-init="init()" @keydown.escape.window="onEscape()">
 
 <!-- Tabs -->
 <div class="tabs">
@@ -102,13 +103,21 @@
                                 @change="toggleSelect(recKey(row.rrset, row.ri))"
                                 style="cursor:pointer;">
                         </td>
-                        <td class="mono text-sm" x-text="row.rrset.name"></td>
+                        <td class="mono text-sm" style="max-width:320px; word-break:break-all;">
+                            <span x-text="row.rrset.name"></span>
+                            <template x-if="row.rrset.type === 'PTR' && arpaToIp(row.rrset.name)">
+                                <span class="text-dim" style="display:block;">(<span x-text="arpaToIp(row.rrset.name)"></span>)</span>
+                            </template>
+                            <template x-if="(row.rrset.type === 'NS' || row.rrset.type === 'SOA') && arpaToNetwork(row.rrset.name)">
+                                <span class="text-dim" style="display:block;">(<span x-text="arpaToNetwork(row.rrset.name)"></span>)</span>
+                            </template>
+                        </td>
                         <td><span class="badge badge-blue" :class="'rr-' + row.rrset.type" x-text="row.rrset.type"></span></td>
                         <td class="text-sm" x-text="row.rrset.ttl"></td>
                         <td class="mono text-sm" style="max-width:400px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                             :style="row.rec.disabled ? 'opacity:0.45; text-decoration:line-through;' : ''"
                             x-text="row.rec.content"></td>
-                        <td>
+                        <td style="white-space:nowrap;">
                             <div class="btn-group">
                                 <button class="btn btn-sm" @click="openEditRecord(row.rrset, row.rec, row.ri)">Edit</button>
                                 <button class="btn btn-danger btn-sm"
@@ -168,9 +177,35 @@
                         <option value="Slave">Slave / Secondary</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Account</label>
-                    <input type="text" x-model="settings.account" placeholder="">
+                <div class="form-group" style="position:relative;" x-data="zoneUserManager()" x-init="init()">
+                    <label>Assigned Users</label>
+                    <div class="user-list">
+                        <template x-if="assigned.length === 0">
+                            <div class="user-list-empty">No users assigned.</div>
+                        </template>
+                        <template x-for="u in assigned" :key="u.id">
+                            <div class="user-list-row">
+                                <span class="text-sm" x-text="u.username"></span>
+                                <button type="button" class="user-list-remove" @click.stop="removeUser(u)" title="Remove access">&times;</button>
+                            </div>
+                        </template>
+                    </div>
+                    <div style="position:relative; margin-top:0.5rem;">
+                        <input type="text" x-model="query" x-ref="search" placeholder="Search users to add…"
+                               @focus="open = true" @blur="delayClose()"
+                               @keydown.escape="open = false"
+                               style="width:100%;">
+                        <div class="account-dropdown" x-show="open && filtered.length > 0" @mousedown.prevent>
+                            <template x-for="u in filtered" :key="u.id">
+                                <div class="account-option" @click="addUser(u)">
+                                    <span x-text="u.username"></span>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="account-dropdown" x-show="open && query.length > 0 && filtered.length === 0" @mousedown.prevent>
+                            <div style="padding:0.45rem 0.75rem;font-size:0.875rem;color:var(--text-dim,#8b949e);">No matching users</div>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label style="display:flex; align-items:center; gap:0.4rem;">
@@ -204,30 +239,58 @@
 {% endif %}
 
 <!-- Add/Edit Record Modal -->
-<div id="record-modal" class="modal-overlay" style="display:none"
-    x-data="{}"
-    @click.self="document.getElementById('record-modal').style.display='none'">
+<div id="record-modal" class="modal-overlay" style="display:none">
     <div class="modal" style="max-width: 580px;">
         <div class="modal-header">
             <span x-text="editMode ? 'Edit Record' : 'Add Record'"></span>
-            <button class="btn btn-sm" @click="document.getElementById('record-modal').style.display='none'">&times;</button>
+            <button class="btn btn-sm" @click="closeModal()">&times;</button>
         </div>
         <form @submit.prevent="saveRecord()">
             <div class="modal-body">
                 <template x-if="modalError"><div class="flash flash-error" x-text="modalError"></div></template>
                 <div class="grid-2">
-                    <div class="form-group">
-                        <label>Name</label>
-                        <input type="text" x-model="form.name" required :readonly="editMode">
-                    </div>
+                    <template x-if="isReverseZone && (form.type === 'PTR' || form.type === 'NS')">
+                        <div class="form-group">
+                            <label x-text="form.type === 'NS' ? 'Network' : 'IP Address'">
+                                <span class="text-dim text-sm" x-text="form.type === 'NS' ? '(CIDR, e.g. 192.168.1.0/24)' : '(IPv4 or IPv6)'"></span>
+                            </label>
+                            <input type="text" x-model="ptrIpInput" @input="onPtrIpInput()"
+                                :readonly="editMode"
+                                :placeholder="form.type === 'NS' ? 'e.g. 192.168.1.0/24  /  2001:db8::/32' : 'e.g. 192.168.1.5  /  2001:db8::1'">
+                            <div x-show="ptrIpError" class="text-sm" style="color:var(--danger,#ef4444); margin-top:0.25rem;" x-text="ptrIpError"></div>
+                        </div>
+                    </template>
+                    <template x-if="!(isReverseZone && (form.type === 'PTR' || form.type === 'NS'))">
+                        <div class="form-group">
+                            <label>Name <span class="text-dim text-sm">(relative to zone)</span></label>
+                            <div style="display:flex; align-items:center; gap:0;">
+                                <input type="text" x-model="form.name" :readonly="editMode"
+                                    placeholder="leave empty for apex"
+                                    style="flex:1; min-width:0; border-radius:6px 0 0 6px; border-right:none;">
+                                <span class="text-dim text-sm mono"
+                                    style="padding:0.5rem 0.6rem; background:var(--bg); border:1px solid var(--border); border-radius:0 6px 6px 0; white-space:nowrap;"
+                                >{{ '.' + zone.name }}</span>
+                            </div>
+                        </div>
+                    </template>
                     <div class="form-group">
                         <label>Type</label>
-                        <select x-model="form.type" :disabled="editMode">
+                        <select x-model="form.type" :disabled="editMode"
+                            @change="ptrIpInput = ''; ptrIpError = ''; arpaNameError = ''; ptrZone = ''; ptrLooking = false; ptrLookupDone = false; createPtr = false; if (isReverseZone && (form.type === 'PTR' || form.type === 'NS')) form.name = zoneName;">
                             {% for rt in record_types %}
                             <option value="{{ rt }}">{{ rt }}</option>
                             {% endfor %}
                         </select>
                     </div>
+                    <template x-if="isReverseZone && (form.type === 'PTR' || form.type === 'NS')">
+                        <div class="form-group" style="grid-column: span 2;">
+                            <label x-text="form.type === 'NS' ? 'Name' : 'PTR Name'"> <span class="text-dim text-sm">(in-addr.arpa / ip6.arpa)</span></label>
+                            <input type="text" x-model="form.name" required @input="onArpaNameInput()"
+                                :readonly="editMode"
+                                :placeholder="form.type === 'NS' ? 'auto-filled from CIDR, or enter directly' : 'auto-filled from IP, or enter directly'">
+                            <div x-show="arpaNameError" class="text-sm" style="color:var(--danger,#ef4444); margin-top:0.25rem;" x-text="arpaNameError"></div>
+                        </div>
+                    </template>
                     <div class="form-group">
                         <label>TTL</label>
                         <input type="number" x-model.number="form.ttl" min="1" required>
@@ -241,12 +304,29 @@
                     </div>
                     <div class="form-group" style="grid-column: span 2;">
                         <label>Content</label>
-                        <input type="text" x-model="form.content" required>
+                        <input type="text" x-model="form.content" required
+                            @input="debouncedLookupPtr()"
+                            @blur="lookupPtrZone()">
                     </div>
+                </div>
+                <!-- PTR auto-create (forward zones only, A records) -->
+                <div x-show="!isReverseZone && (form.type === 'A' || form.type === 'AAAA') && !editMode"
+                     style="margin-top: 0.5rem; padding: 0.75rem; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 6px;">
+                    <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.875rem; font-weight:normal;">
+                        <input type="checkbox" x-model="createPtr" :disabled="!ptrZone">
+                        Also create PTR record
+                        <template x-if="ptrLooking"><span class="text-dim text-sm">(searching...)</span></template>
+                        <template x-if="!ptrLooking && ptrZone">
+                            <span>in <span x-text="ptrZone" class="mono" style="margin-left:0.15rem;"></span></span>
+                        </template>
+                        <template x-if="!ptrLooking && ptrLookupDone && !ptrZone && form.content">
+                            <span class="text-dim text-sm">(no reverse zone found)</span>
+                        </template>
+                    </label>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn" @click="document.getElementById('record-modal').style.display='none'">Cancel</button>
+                <button type="button" class="btn" @click="closeModal()">Cancel</button>
                 <button type="submit" class="btn btn-primary" :disabled="saving">
                     <span x-show="!saving">Save</span>
                     <span x-show="saving">Saving...</span>
@@ -259,11 +339,163 @@
 </div><!-- end x-data -->
 
 <script>
+const zoneName = {{ zone.name | tojson }};
+const serverId = {{ server_id | tojson }};
+
+function expandIPv6(ip) {
+    const halves = ip.split('::');
+    if (halves.length > 2) return null;
+    let groups;
+    if (halves.length === 2) {
+        const left = halves[0] ? halves[0].split(':') : [];
+        const right = halves[1] ? halves[1].split(':') : [];
+        const fill = 8 - left.length - right.length;
+        if (fill < 0) return null;
+        groups = [...left, ...Array(fill).fill('0'), ...right];
+    } else {
+        groups = ip.split(':');
+    }
+    if (groups.length !== 8) return null;
+    return groups.map(g => g.padStart(4, '0'));
+}
+
+function ipToArpa(ip) {
+    const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (v4) {
+        const [, a, b, c, d] = v4;
+        return `${d}.${c}.${b}.${a}.in-addr.arpa.`;
+    }
+    if (ip.includes(':')) {
+        const expanded = expandIPv6(ip);
+        if (!expanded) return null;
+        const nibbles = expanded.join('').split('').reverse();
+        return nibbles.join('.') + '.ip6.arpa.';
+    }
+    return null;
+}
+
+function arpaToIp(arpa) {
+    const a = arpa.endsWith('.') ? arpa.slice(0, -1) : arpa;
+    if (a.endsWith('.in-addr.arpa')) {
+        const parts = a.slice(0, -'.in-addr.arpa'.length).split('.');
+        return parts.reverse().join('.');
+    }
+    if (a.endsWith('.ip6.arpa')) {
+        const nibbles = a.slice(0, -'.ip6.arpa'.length).split('.');
+        if (nibbles.length !== 32) return null;
+        const reversed = nibbles.reverse().join('');
+        const groups = [];
+        for (let i = 0; i < 8; i++) groups.push(reversed.slice(i*4, i*4+4));
+        return groups.join(':');
+    }
+    return null;
+}
+
+function compressIPv6(expanded) {
+    const groups = expanded.split(':').map(g => parseInt(g, 16).toString(16));
+    let bestStart = -1, bestLen = 0, curStart = -1, curLen = 0;
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i] === '0') {
+            if (curStart === -1) { curStart = i; curLen = 1; } else curLen++;
+            if (curLen > bestLen) { bestStart = curStart; bestLen = curLen; }
+        } else { curStart = -1; curLen = 0; }
+    }
+    if (bestLen >= 2) {
+        const left = groups.slice(0, bestStart).join(':');
+        const right = groups.slice(bestStart + bestLen).join(':');
+        return left + '::' + right;
+    }
+    return groups.join(':');
+}
+
+function arpaToIp(name) {
+    const n = (name || '').replace(/\.$/, '').toLowerCase();
+    const v4 = n.match(/^([\d.]+)\.in-addr\.arpa$/);
+    if (v4) {
+        const parts = v4[1].split('.').reverse();
+        while (parts.length < 4) parts.push('0');
+        return parts.join('.');
+    }
+    const v6 = n.match(/^([0-9a-f.]+)\.ip6\.arpa$/);
+    if (v6) {
+        const nibbles = v6[1].split('.').reverse();
+        if (nibbles.length === 32) {
+            const groups = [];
+            for (let i = 0; i < 32; i += 4) groups.push(nibbles.slice(i, i + 4).join(''));
+            return compressIPv6(groups.join(':'));
+        }
+    }
+    return null;
+}
+
+function arpaToNetwork(arpa) {
+    const a = (arpa || '').replace(/\.$/, '').toLowerCase();
+    const v4 = a.match(/^([\d.]+)\.in-addr\.arpa$/);
+    if (v4) {
+        const octets = v4[1].split('.').reverse();
+        const prefix = octets.length * 8;
+        while (octets.length < 4) octets.push('0');
+        return octets.join('.') + '/' + prefix;
+    }
+    const v6 = a.match(/^([0-9a-f.]+)\.ip6\.arpa$/);
+    if (v6) {
+        const nibbles = v6[1].split('.').reverse();
+        const prefix = nibbles.length * 4;
+        while (nibbles.length < 32) nibbles.push('0');
+        const groups = [];
+        for (let i = 0; i < 32; i += 4) groups.push(nibbles.slice(i, i + 4).join(''));
+        return compressIPv6(groups.join(':')) + '/' + prefix;
+    }
+    return null;
+}
+
+function cidrToArpa(cidr) {
+    const slash = cidr.indexOf('/');
+    if (slash === -1) return ipToArpa(cidr);
+    const addr = cidr.slice(0, slash);
+    const prefixLen = parseInt(cidr.slice(slash + 1));
+    if (isNaN(prefixLen)) return null;
+    if (addr.includes(':')) {
+        if (prefixLen % 4 !== 0 || prefixLen > 128) return null;
+        const expanded = expandIPv6(addr);
+        if (!expanded) return null;
+        const nibbles = expanded.join('').split('').slice(0, prefixLen / 4);
+        return nibbles.reverse().join('.') + '.ip6.arpa.';
+    } else {
+        if (prefixLen % 8 !== 0 || prefixLen > 32) return null;
+        const octets = addr.split('.');
+        return octets.slice(0, prefixLen / 8).reverse().join('.') + '.in-addr.arpa.';
+    }
+}
+
+function toRelativeName(absName, zone) {
+    const z = zone.endsWith('.') ? zone : zone + '.';
+    const n = absName.endsWith('.') ? absName : absName + '.';
+    if (n === z) return '@';
+    if (n.endsWith('.' + z)) return n.slice(0, -(z.length + 1));
+    return absName;
+}
+
+function toAbsoluteName(relative, zone) {
+    const z = zone.endsWith('.') ? zone : zone + '.';
+    if (!relative || relative === '@') return z;
+    if (relative.endsWith('.')) return relative;
+    return relative + '.' + z;
+}
+
+function ipInArpaZone(ip, zoneName) {
+    const arpa = ipToArpa(ip);
+    if (!arpa) return false;
+    const z = zoneName.endsWith('.') ? zoneName : zoneName + '.';
+    return arpa === z || arpa.endsWith('.' + z);
+}
+
 function zoneDetail() {
     const zoneData = {{ zone | tojson }};
     const serverId = {{ server_id | tojson }};
     const defaultTtl = {{ default_ttl }};
     const zoneName = {{ zone.name | tojson }};
+    const isReverseZone = {{ is_reverse_zone | tojson }};
 
     function apiUrl(path) {
         return path + (serverId ? '?server_id=' + serverId : '');
@@ -288,6 +520,17 @@ function zoneDetail() {
         _editRecIdx: null,
         bulkContent: '',
         bulkContentError: '',
+        isReverseZone: isReverseZone,
+        ptrZone: '',
+        ptrName: '',
+        ptrServerId: null,
+        createPtr: false,
+        ptrLooking: false,
+        ptrLookupDone: false,
+        _ptrLookupTimer: null,
+        ptrIpInput: '',
+        ptrIpError: '',
+        arpaNameError: '',
 
         init() {
             this.rrsets = (zoneData.rrsets || []).map(rs => ({
@@ -392,26 +635,126 @@ function zoneDetail() {
 
         openAddRecord() {
             this.editMode = false;
-            this.form = { name: zoneName, type: 'A', ttl: defaultTtl, content: '', disabled: false };
+            this.form = { name: '', type: isReverseZone ? 'PTR' : 'A', ttl: defaultTtl, content: '', disabled: false };
             this.modalError = '';
             this._editRrset = null;
             this._editRecIdx = null;
+            this.ptrZone = '';
+            this.ptrName = '';
+            this.ptrServerId = null;
+            this.createPtr = false;
+            this.ptrLooking = false;
+            this.ptrLookupDone = false;
+            this.ptrIpInput = '';
+            this.ptrIpError = '';
+            this.arpaNameError = '';
             document.getElementById('record-modal').style.display = 'flex';
         },
 
         openEditRecord(rrset, rec, ri) {
             this.editMode = true;
-            this.form = { name: rrset.name, type: rrset.type, ttl: rrset.ttl, content: rec.content, disabled: rec.disabled };
+            this.form = { name: toRelativeName(rrset.name, zoneName), type: rrset.type, ttl: rrset.ttl, content: rec.content, disabled: rec.disabled };
             this.modalError = '';
             this._editRrset = rrset;
             this._editRecIdx = ri;
+            this.ptrZone = '';
+            this.ptrName = '';
+            this.ptrServerId = null;
+            this.createPtr = false;
+            this.ptrLooking = false;
+            this.ptrLookupDone = false;
+            this.ptrIpInput = '';
+            this.ptrIpError = '';
+            this.arpaNameError = '';
+            if (isReverseZone && rrset.type === 'PTR') {
+                this.ptrIpInput = arpaToIp(rrset.name) || '';
+            } else if (isReverseZone && rrset.type === 'NS') {
+                this.ptrIpInput = arpaToNetwork(rrset.name) || '';
+            }
             document.getElementById('record-modal').style.display = 'flex';
         },
 
+        onPtrIpInput() {
+            const raw = this.ptrIpInput.trim();
+            if (!raw) { this.ptrIpError = ''; return; }
+            if (this.form.type === 'NS') {
+                const arpa = cidrToArpa(raw);
+                if (!arpa) { this.ptrIpError = 'Invalid CIDR (IPv4 prefix must be /8, /16, /24, /32; IPv6 must be nibble-aligned)'; return; }
+                this.ptrIpError = '';
+                this.arpaNameError = '';
+                this.form.name = arpa;
+            } else {
+                if (!ipInArpaZone(raw, zoneName)) {
+                    this.ptrIpError = `IP not in zone ${zoneName}`;
+                    return;
+                }
+                const arpa = ipToArpa(raw);
+                if (!arpa) { this.ptrIpError = 'Invalid IP address'; return; }
+                this.ptrIpError = '';
+                this.arpaNameError = '';
+                this.form.name = arpa;
+            }
+        },
+
+        onArpaNameInput() {
+            const raw = this.form.name.trim();
+            if (!raw) { this.arpaNameError = ''; return; }
+            const arpa = raw.endsWith('.') ? raw : raw + '.';
+            const z = zoneName.endsWith('.') ? zoneName : zoneName + '.';
+            if (arpa !== z && !arpa.endsWith('.' + z)) {
+                this.arpaNameError = `Name not in zone ${zoneName}`;
+            } else {
+                this.arpaNameError = '';
+            }
+        },
+
+        debouncedLookupPtr() {
+            if (this._ptrLookupTimer) clearTimeout(this._ptrLookupTimer);
+            this.ptrZone = '';
+            this.ptrLookupDone = false;
+            this.createPtr = false;
+            this._ptrLookupTimer = setTimeout(() => this.lookupPtrZone(), 600);
+        },
+
+        async lookupPtrZone() {
+            if (isReverseZone) return;
+            if (this.form.type !== 'A' && this.form.type !== 'AAAA') { this.ptrZone = ''; this.ptrLookupDone = false; return; }
+            const ip = this.form.content.trim();
+            if (!ip) { this.ptrZone = ''; this.ptrLookupDone = false; return; }
+            this.ptrLooking = true;
+            try {
+                const r = await fetch('/api/reverse-zones/lookup?ip=' + encodeURIComponent(ip));
+                if (r.ok) {
+                    const d = await r.json();
+                    this.ptrZone = d.zone_name;
+                    this.ptrName = d.ptr_name;
+                    this.ptrServerId = d.server_id;
+                } else {
+                    this.ptrZone = '';
+                    this.ptrName = '';
+                    this.ptrServerId = null;
+                    this.createPtr = false;
+                }
+            } catch (_) {
+                this.ptrZone = '';
+            } finally {
+                this.ptrLooking = false;
+                this.ptrLookupDone = true;
+            }
+        },
+
         async saveRecord() {
+            if (isReverseZone && (this.form.type === 'PTR' || this.form.type === 'NS') && !this.editMode) {
+                if (this.ptrIpError) { this.modalError = this.ptrIpError; return; }
+                if (this.arpaNameError) { this.modalError = this.arpaNameError; return; }
+            }
             this.saving = true; this.modalError = '';
+            // Ensure PTR content is a FQDN
+            const content = (this.form.type === 'PTR' && this.form.content && !this.form.content.endsWith('.'))
+                ? this.form.content + '.'
+                : this.form.content;
             const rrset = {
-                name: this.form.name.endsWith('.') ? this.form.name : this.form.name + '.',
+                name: toAbsoluteName(this.form.name.trim(), zoneName),
                 type: this.form.type,
                 ttl: this.form.ttl,
                 changetype: 'REPLACE',
@@ -425,7 +768,7 @@ function zoneDetail() {
                     rrset.name = existing.name;
                     rrset.records = existing.records.map((r, i) =>
                         i === this._editRecIdx
-                            ? { content: this.form.content, disabled: this.form.disabled }
+                            ? { content: content, disabled: this.form.disabled }
                             : { content: r.content, disabled: r.disabled }
                     );
                 }
@@ -435,10 +778,10 @@ function zoneDetail() {
                 if (existing) {
                     rrset.records = [
                         ...existing.records.map(r => ({ content: r.content, disabled: r.disabled })),
-                        { content: this.form.content, disabled: this.form.disabled }
+                        { content: content, disabled: this.form.disabled }
                     ];
                 } else {
-                    rrset.records = [{ content: this.form.content, disabled: this.form.disabled }];
+                    rrset.records = [{ content: content, disabled: this.form.disabled }];
                 }
             }
 
@@ -448,6 +791,27 @@ function zoneDetail() {
                 body: JSON.stringify([rrset])
             });
             if (r.ok) {
+                // Optionally create PTR in reverse zone.
+                if (this.createPtr && this.ptrZone && this.ptrName && !this.editMode) {
+                    const ptrRrset = [{
+                        name: this.ptrName,
+                        type: 'PTR',
+                        ttl: this.form.ttl,
+                        changetype: 'REPLACE',
+                        records: [{ content: toAbsoluteName(this.form.name.trim(), zoneName), disabled: false }]
+                    }];
+                    const ptrUrl = `/api/zones/${this.ptrZone}/rrsets` +
+                        (this.ptrServerId ? '?server_id=' + this.ptrServerId : '');
+                    const pr = await fetch(ptrUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(ptrRrset)
+                    });
+                    if (!pr.ok) {
+                        const pd = await pr.json();
+                        showToast('A/AAAA saved but PTR failed: ' + (pd.detail || 'Error'), 'error');
+                    }
+                }
                 location.reload();
             } else {
                 const d = await r.json();
@@ -553,12 +917,25 @@ function zoneDetail() {
             else r.json().then(d => showToast(d.detail || 'Error', 'error'));
         },
 
+        closeModal() {
+            document.getElementById('record-modal').style.display = 'none';
+            this.saving = false;
+        },
+
+        onEscape() {
+            const modal = document.getElementById('record-modal');
+            if (modal && modal.style.display !== 'none') {
+                this.closeModal();
+            } else if (this.selected.length > 0) {
+                this.clearSelection();
+            }
+        },
+
         async saveSettings() {
             const isAdmin = {{ (user.role == 'admin') | tojson }};
             const payload = {};
             if (isAdmin) {
                 payload.kind = this.settings.kind;
-                payload.account = this.settings.account;
                 payload.soa_edit = this.settings.soa_edit;
                 payload.soa_edit_api = this.settings.soa_edit_api;
             }
@@ -575,5 +952,101 @@ function zoneDetail() {
         }
     };
 }
+
+function zoneUserManager() {
+    return {
+        assigned: [],
+        allUsers: [],
+        query: '',
+        open: false,
+        get filtered() {
+            const q = this.query.toLowerCase();
+            const assignedIds = new Set(this.assigned.map(u => u.id));
+            return this.allUsers.filter(u => !assignedIds.has(u.id) && u.username.toLowerCase().includes(q));
+        },
+        async init() {
+            const [assignedRes, allRes] = await Promise.all([
+                fetch(`/api/zones/${encodeURIComponent(zoneName)}/users`),
+                fetch('/api/users'),
+            ]);
+            if (assignedRes.ok) this.assigned = await assignedRes.json();
+            if (allRes.ok) this.allUsers = await allRes.json();
+        },
+        addUser(u) {
+            showConfirm(`Assign "${u.username}" to this zone?`, async () => {
+                const r = await fetch(`/api/zones/${encodeURIComponent(zoneName)}/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: u.id, pdns_server_id: serverId }),
+                });
+                if (r.ok) { this.assigned.push(u); this.query = ''; this.open = false; }
+                else r.json().then(d => showToast(d.detail || 'Error adding user', 'error'));
+            });
+        },
+        removeUser(u) {
+            showConfirm(`Remove "${u.username}" from this zone?`, async () => {
+                const r = await fetch(`/api/zones/${encodeURIComponent(zoneName)}/users/${u.id}`, { method: 'DELETE' });
+                if (r.ok) this.assigned = this.assigned.filter(a => a.id !== u.id);
+                else r.json().then(d => showToast(d.detail || 'Error removing user', 'error'));
+            });
+        },
+        delayClose() { setTimeout(() => { this.open = false; }, 150); },
+    };
+}
 </script>
+
+<style>
+.user-list {
+    background: var(--input-bg, #0d1117);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 6px;
+    min-height: 2.25rem;
+    overflow: hidden;
+}
+.user-list-empty {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-dim, #8b949e);
+}
+.user-list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.75rem;
+    border-bottom: 1px solid var(--border, #30363d);
+}
+.user-list-row:last-child { border-bottom: none; }
+.user-list-remove {
+    background: none;
+    border: none;
+    color: var(--text-dim, #8b949e);
+    cursor: pointer;
+    padding: 0 0.2rem;
+    line-height: 1;
+    font-size: 1rem;
+    opacity: 0.7;
+}
+.user-list-remove:hover { opacity: 1; color: var(--danger, #f85149); }
+.account-dropdown {
+    position: absolute;
+    z-index: 100;
+    background: var(--surface, #161b22);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 6px;
+    margin-top: 2px;
+    max-height: 14rem;
+    overflow-y: auto;
+    min-width: 14rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.account-option {
+    display: flex;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+.account-option:hover, .account-option.active { background: var(--hover, #21262d); }
+</style>
+
 {% endblock %}

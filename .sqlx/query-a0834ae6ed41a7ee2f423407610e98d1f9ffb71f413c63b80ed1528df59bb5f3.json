@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO zone_assignments (user_id, zone_name, pdns_server_id) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a0834ae6ed41a7ee2f423407610e98d1f9ffb71f413c63b80ed1528df59bb5f3"
+}

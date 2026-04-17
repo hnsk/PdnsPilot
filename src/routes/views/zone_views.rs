@@ -10,7 +10,8 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::auth::get_session_user;
-use crate::repositories::{pdns_server_repo, settings_repo, zone_assignment_repo, zone_template_repo};
+use crate::repositories::{pdns_server_repo, reverse_zone_repo, settings_repo, zone_assignment_repo, zone_template_repo};
+use crate::reverse_zones;
 use crate::AppState;
 
 pub const RECORD_TYPES: &[&str] = &[
@@ -23,9 +24,14 @@ pub const RECORD_TYPES: &[&str] = &[
     "TKEY", "TLSA", "TSIG", "TXT", "URI", "WKS", "ZONEMD",
 ];
 
+pub const REVERSE_RECORD_TYPES: &[&str] = &[
+    "PTR", "NS", "SOA", "CNAME", "TXT", "NSEC", "NSEC3", "NSEC3PARAM", "RRSIG", "DNSKEY",
+];
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/zones", get(zones_list))
+        .route("/reverse-zones", get(reverse_zones_list))
         .route("/zones/:zone_id", get(zone_detail))
         .route("/zones/:zone_id/export", get(zone_export))
         .route("/zones/:zone_id/dnssec", get(zone_dnssec))
@@ -85,6 +91,12 @@ async fn zones_list(State(state): State<AppState>, jar: CookieJar) -> Response {
         }
     }
 
+    // Filter out reverse zones — they appear on /reverse-zones instead.
+    all_zones.retain(|z| {
+        let name = z.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+        !reverse_zones::is_reverse_zone(name)
+    });
+
     if user.role != "admin" {
         let assignments = zone_assignment_repo::get_user_zone_assignments(&state.db, user.id)
             .await
@@ -128,6 +140,98 @@ async fn zones_list(State(state): State<AppState>, jar: CookieJar) -> Response {
         pdns_servers => pdns_servers,
     };
     render(&state, "zones/list.html", ctx)
+}
+
+async fn reverse_zones_list(State(state): State<AppState>, jar: CookieJar) -> Response {
+    let user = match get_auth_user(&state, &jar).await {
+        Some(u) => u,
+        None => return redirect("/login"),
+    };
+
+    let servers = pdns_server_repo::list_servers(&state.db).await.unwrap_or_default();
+    let active_servers: Vec<_> = servers.into_iter().filter(|s| s.is_active).collect();
+
+    let clients: Vec<_> = {
+        let registry = state.pdns.read();
+        active_servers
+            .iter()
+            .map(|srv| (srv.id, srv.name.clone(), registry.get(srv.id)))
+            .collect()
+    };
+
+    let mut all_zones = Vec::new();
+    for (srv_id, srv_name, client_opt) in &clients {
+        if let Some(client) = client_opt {
+            if let Ok(zones) = client.list_zones(None).await {
+                if let Some(arr) = zones.as_array() {
+                    for z in arr {
+                        let name = z.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+                        if reverse_zones::is_reverse_zone(name) {
+                            let mut z = z.clone();
+                            z["_server_id"] = json!(srv_id);
+                            z["_server_name"] = json!(srv_name);
+                            all_zones.push(z);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if user.role != "admin" {
+        let assignments = zone_assignment_repo::get_user_zone_assignments(&state.db, user.id)
+            .await
+            .unwrap_or_default();
+        let allowed_pairs: std::collections::HashSet<(String, Option<i64>)> = assignments
+            .iter()
+            .filter(|a| a.pdns_server_id.is_some())
+            .map(|a| (a.zone_name.clone(), a.pdns_server_id))
+            .collect();
+        let allowed_names: std::collections::HashSet<String> = assignments
+            .iter()
+            .filter(|a| a.pdns_server_id.is_none())
+            .map(|a| a.zone_name.clone())
+            .collect();
+        all_zones.retain(|z| {
+            let name = z.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            let sid = z.get("_server_id").and_then(|v| v.as_i64());
+            allowed_pairs.contains(&(name.clone(), sid))
+                || allowed_names.contains(&name)
+        });
+    }
+
+    // Annotate each zone with network string.
+    for z in &mut all_zones {
+        let name = z.get("name").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let network = reverse_zone_repo::get_network(&state.db, &name)
+            .await
+            .unwrap_or(None)
+            .or_else(|| reverse_zones::arpa_to_network(&name));
+        if let Some(net) = network {
+            z["_network"] = json!(net);
+        }
+    }
+
+    let visible_server_ids: std::collections::HashSet<i64> = all_zones
+        .iter()
+        .filter_map(|z| z.get("_server_id").and_then(|v| v.as_i64()))
+        .collect();
+    let pdns_servers: Vec<_> = active_servers
+        .iter()
+        .filter(|s| user.role == "admin" || visible_server_ids.contains(&s.id))
+        .map(|s| json!({"id": s.id, "name": s.name, "api_url": s.api_url, "server_id": s.server_id, "is_active": s.is_active}))
+        .collect();
+
+    let zone_templates = zone_template_repo::list_templates(&state.db).await.unwrap_or_default();
+
+    let ctx = minijinja::context! {
+        user => serde_json::to_value(&user).unwrap_or_default(),
+        active_page => "reverse-zones",
+        zones => all_zones,
+        zone_templates => serde_json::to_value(&zone_templates).unwrap_or_default(),
+        pdns_servers => pdns_servers,
+    };
+    render(&state, "zones/reverse_list.html", ctx)
 }
 
 async fn zone_detail(
@@ -189,11 +293,26 @@ async fn zone_detail(
             .unwrap_or(60)
     };
 
+    let zone_name_str = zone.get("name").and_then(|v| v.as_str()).unwrap_or(&zone_id);
+    let is_rev = reverse_zones::is_reverse_zone(zone_name_str);
+    let record_types: &[&str] = if is_rev { REVERSE_RECORD_TYPES } else { RECORD_TYPES };
+
+    let network = if is_rev {
+        reverse_zone_repo::get_network(&state.db, zone_name_str)
+            .await
+            .unwrap_or(None)
+            .or_else(|| reverse_zones::arpa_to_network(zone_name_str))
+    } else {
+        None
+    };
+
     let ctx = minijinja::context! {
         user => serde_json::to_value(&user).unwrap_or_default(),
-        active_page => "zones",
+        active_page => if is_rev { "reverse-zones" } else { "zones" },
         zone => zone,
-        record_types => RECORD_TYPES,
+        record_types => record_types,
+        is_reverse_zone => is_rev,
+        network => network,
         server_id => q.server_id,
         server_name => srv.name,
         default_ttl => default_ttl,

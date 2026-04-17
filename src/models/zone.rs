@@ -41,6 +41,9 @@ pub struct ZoneCreate {
     pub soa_retry: Option<i64>,
     pub soa_expire: Option<i64>,
     pub soa_ttl: Option<i64>,
+    /// IP network notation for reverse zones (e.g. "192.168.1.0/24").
+    /// When provided, overrides `name` and derives the arpa zone name.
+    pub network: Option<String>,
 }
 
 fn default_native() -> String {

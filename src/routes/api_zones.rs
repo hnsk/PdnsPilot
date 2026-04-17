@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, patch, put},
+    routing::{delete, get, patch, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -10,9 +10,11 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use crate::auth::{AdminUser, AuthUser};
+use crate::repositories::user_repo;
 use crate::error::AppError;
 use crate::models::zone::{RRSet, ZoneCreate, ZoneUpdate};
-use crate::repositories::{audit_repo, pdns_server_repo, settings_repo, zone_assignment_repo, zone_template_repo};
+use crate::repositories::{audit_repo, pdns_server_repo, reverse_zone_repo, settings_repo, zone_assignment_repo, zone_template_repo};
+use crate::reverse_zones;
 use crate::AppState;
 
 const QUOTED_TYPES: &[&str] = &["TXT", "SPF"];
@@ -31,6 +33,9 @@ pub fn router() -> Router<AppState> {
         .route("/api/zones/:zone_id/axfr-retrieve", put(axfr_retrieve))
         .route("/api/zones/:zone_id/metadata", get(list_metadata))
         .route("/api/zones/:zone_id/metadata/:kind", put(set_metadata))
+        .route("/api/zones/:zone_id/users", get(get_zone_users).post(add_zone_user))
+        .route("/api/zones/:zone_id/users/:user_id", delete(remove_zone_user))
+        .route("/api/reverse-zones/lookup", get(lookup_reverse_zone))
 }
 
 fn ensure_quoted(content: &str) -> String {
@@ -240,7 +245,11 @@ async fn create_zone(
 
     let client = get_pdns_client(&state, srv.id, &srv.name)?;
 
-    let zone_fqdn = if body.name.ends_with('.') {
+    // If network provided, derive arpa zone name from it.
+    let zone_fqdn = if let Some(ref net) = body.network {
+        reverse_zones::network_to_arpa(net)
+            .ok_or_else(|| AppError::BadRequest(format!("Invalid network: {net}")))?
+    } else if body.name.ends_with('.') {
         body.name.clone()
     } else {
         format!("{}.", body.name)
@@ -318,6 +327,12 @@ async fn create_zone(
     pdns_server_repo::map_zone_to_server(&state.db, &zone_name, srv.id)
         .await
         .map_err(AppError::Internal)?;
+
+    if let Some(ref net) = body.network {
+        reverse_zone_repo::set_network(&state.db, &zone_name, net)
+            .await
+            .map_err(AppError::Internal)?;
+    }
 
     let mut detail_obj = json!({"kind": body.kind});
     if let Some(t) = &template_name {
@@ -440,12 +455,18 @@ async fn delete_zone(
             zone_assignment_repo::delete_zone_assignments(&state.db, &zone_id)
                 .await
                 .map_err(AppError::Internal)?;
+            reverse_zone_repo::delete_network(&state.db, &zone_id)
+                .await
+                .map_err(AppError::Internal)?;
         }
     } else {
         zone_assignment_repo::delete_zone_assignments(&state.db, &zone_id)
             .await
             .map_err(AppError::Internal)?;
         pdns_server_repo::unmap_zone(&state.db, &zone_id)
+            .await
+            .map_err(AppError::Internal)?;
+        reverse_zone_repo::delete_network(&state.db, &zone_id)
             .await
             .map_err(AppError::Internal)?;
     }
@@ -484,6 +505,13 @@ async fn patch_rrsets(
         if QUOTED_TYPES.contains(&rs.rrtype.as_str()) {
             for rec in &mut rs.records {
                 rec.content = ensure_quoted(&rec.content);
+            }
+        }
+        if rs.rrtype == "PTR" || rs.rrtype == "NS" || rs.rrtype == "MX" || rs.rrtype == "CNAME" {
+            for rec in &mut rs.records {
+                if !rec.content.is_empty() && !rec.content.ends_with('.') {
+                    rec.content.push('.');
+                }
             }
         }
     }
@@ -709,6 +737,133 @@ async fn set_metadata(
         "metadata.set",
         Some(&zone_id),
         Some(&json!({"kind": kind, "value": value}).to_string()),
+    )
+    .await
+    .ok();
+    Ok(Json(json!({"ok": true})))
+}
+
+#[derive(Deserialize)]
+struct LookupQuery {
+    ip: String,
+    server_id: Option<i64>,
+}
+
+async fn lookup_reverse_zone(
+    State(state): State<AppState>,
+    Query(q): Query<LookupQuery>,
+    AuthUser(_user): AuthUser,
+) -> Result<Json<Value>, AppError> {
+    let ptr_name = reverse_zones::ptr_record_name(&q.ip)
+        .ok_or_else(|| AppError::BadRequest(format!("Invalid IP: {}", q.ip)))?;
+
+    let candidates = reverse_zones::reverse_zone_candidates(&q.ip);
+
+    let servers = pdns_server_repo::list_servers(&state.db)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let active: Vec<_> = servers.into_iter().filter(|s| s.is_active).collect();
+
+    let clients: Vec<_> = {
+        let registry = state.pdns.read();
+        active
+            .iter()
+            .filter(|s| q.server_id.map_or(true, |id| id == s.id))
+            .filter_map(|srv| registry.get(srv.id).map(|c| (srv.id, c)))
+            .collect()
+    };
+
+    let candidate_set: std::collections::HashSet<&str> =
+        candidates.iter().map(|s| s.as_str()).collect();
+
+    for (srv_id, client) in &clients {
+        if let Ok(zones) = client.list_zones(None).await {
+            if let Some(arr) = zones.as_array() {
+                for zone in arr {
+                    if let Some(name) = zone["name"].as_str() {
+                        let kind = zone["kind"].as_str().unwrap_or("").to_lowercase();
+                        if kind == "slave" {
+                            continue;
+                        }
+                        if candidate_set.contains(name) {
+                            return Ok(Json(json!({
+                                "zone_name": name,
+                                "ptr_name": ptr_name,
+                                "server_id": srv_id,
+                            })));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Err(AppError::NotFound("No matching reverse zone found".into()))
+}
+
+#[derive(Deserialize)]
+struct AddZoneUserBody {
+    user_id: i64,
+    pdns_server_id: Option<i64>,
+}
+
+async fn get_zone_users(
+    State(state): State<AppState>,
+    Path(zone_id): Path<String>,
+    AdminUser(_user): AdminUser,
+) -> Result<Json<Value>, AppError> {
+    let users = zone_assignment_repo::get_zone_users(&state.db, &zone_id)
+        .await
+        .map_err(AppError::Internal)?;
+    Ok(Json(json!(users)))
+}
+
+async fn add_zone_user(
+    State(state): State<AppState>,
+    Path(zone_id): Path<String>,
+    AdminUser(user): AdminUser,
+    Json(body): Json<AddZoneUserBody>,
+) -> Result<Json<Value>, AppError> {
+    let target = user_repo::get_user_by_id(&state.db, body.user_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    zone_assignment_repo::add_zone_user(&state.db, body.user_id, &zone_id, body.pdns_server_id)
+        .await
+        .map_err(AppError::Internal)?;
+    audit_repo::log_action(
+        &state.db,
+        Some(user.id),
+        Some(&user.username),
+        "zone.user_add",
+        Some(&zone_id),
+        Some(&json!({"target_user": target.username}).to_string()),
+    )
+    .await
+    .ok();
+    Ok(Json(json!({"ok": true})))
+}
+
+async fn remove_zone_user(
+    State(state): State<AppState>,
+    Path((zone_id, user_id)): Path<(String, i64)>,
+    AdminUser(user): AdminUser,
+) -> Result<Json<Value>, AppError> {
+    let target = user_repo::get_user_by_id(&state.db, user_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound("User not found".into()))?;
+    zone_assignment_repo::remove_zone_user(&state.db, user_id, &zone_id)
+        .await
+        .map_err(AppError::Internal)?;
+    audit_repo::log_action(
+        &state.db,
+        Some(user.id),
+        Some(&user.username),
+        "zone.user_remove",
+        Some(&zone_id),
+        Some(&json!({"target_user": target.username}).to_string()),
     )
     .await
     .ok();

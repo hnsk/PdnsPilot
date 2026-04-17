@@ -12,6 +12,7 @@ mod error;
 mod models;
 mod pdns_client;
 mod repositories;
+mod reverse_zones;
 mod routes;
 
 use config::Config;

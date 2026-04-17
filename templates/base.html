@@ -176,6 +176,7 @@
         <nav>
             {% if user.role == 'admin' %}<a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>{% endif %}
             <a href="/zones" class="{% if active_page == 'zones' %}active{% endif %}">Zones</a>
+            <a href="/reverse-zones" class="{% if active_page == 'reverse-zones' %}active{% endif %}">Reverse Zones</a>
             <a href="/tools" class="{% if active_page == 'tools' %}active{% endif %}">Tools</a>
             {% if user.role == 'admin' %}<a href="/metrics" class="{% if active_page == 'metrics' %}active{% endif %}">Metrics</a>{% endif %}
             {% if user.role == 'admin' %}

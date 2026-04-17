@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Zones - PdnsPilot{% endblock %}
+{% block title %}Reverse Zones - PdnsPilot{% endblock %}
 {% block content %}
 <div class="page-header">
-    <h1>Zones</h1>
+    <h1>Reverse Zones</h1>
     {% if user.role == 'admin' %}
-    <button class="btn btn-primary" x-data @click="document.getElementById('create-zone-modal').style.display='flex'">+ New Zone</button>
+    <button class="btn btn-primary" x-data @click="document.getElementById('create-reverse-zone-modal').style.display='flex'">+ New Reverse Zone</button>
     {% endif %}
 </div>
 
@@ -27,7 +27,10 @@ var isAdmin = {{ (user.role == 'admin') | tojson }};
         }
         if (this.search) {
             const q = this.search.toLowerCase();
-            result = result.filter(z => (z.name || '').toLowerCase().includes(q));
+            result = result.filter(z =>
+                (z.name || '').toLowerCase().includes(q) ||
+                (z._network || '').toLowerCase().includes(q)
+            );
         }
         const col = this.sortCol;
         const dir = this.sortDir;
@@ -61,9 +64,9 @@ var isAdmin = {{ (user.role == 'admin') | tojson }};
     </div>
     <template x-if="zones.length === 0">
         <div class="empty-state">
-            <p>No zones found.</p>
+            <p>No reverse zones found.</p>
             <template x-if="isAdmin">
-                <p class="text-dim text-sm mt-1">Create a zone to get started.</p>
+                <p class="text-dim text-sm mt-1">Create a reverse zone to get started.</p>
             </template>
         </div>
     </template>
@@ -71,7 +74,8 @@ var isAdmin = {{ (user.role == 'admin') | tojson }};
         <table>
             <thead>
                 <tr>
-                    <th style="cursor:pointer; user-select:none;" @click="sortBy('name')">Name<span x-text="sortIcon('name')"></span></th>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('_network')">Network<span x-text="sortIcon('_network')"></span></th>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('name')">Zone Name<span x-text="sortIcon('name')"></span></th>
                     <th style="cursor:pointer; user-select:none;" @click="sortBy('kind')">Kind<span x-text="sortIcon('kind')"></span></th>
                     <th style="cursor:pointer; user-select:none;" @click="sortBy('serial')">Serial<span x-text="sortIcon('serial')"></span></th>
                     <th style="cursor:pointer; user-select:none;" @click="sortBy('dnssec')">DNSSEC<span x-text="sortIcon('dnssec')"></span></th>
@@ -82,6 +86,7 @@ var isAdmin = {{ (user.role == 'admin') | tojson }};
             <tbody>
                 <template x-for="z in filtered" :key="z.name + '_' + z._server_id">
                     <tr>
+                        <td class="mono text-sm" x-text="z._network || '-'"></td>
                         <td class="mono"><a :href="'/zones/' + z.name + '?server_id=' + z._server_id" x-text="z.name"></a></td>
                         <td>
                             <span :class="'badge ' + (['Master','Primary'].includes(z.kind) ? 'badge-green' : z.kind === 'Native' ? 'badge-blue' : ['Slave','Secondary'].includes(z.kind) ? 'badge-yellow' : 'badge-gray')" x-text="z.kind"></span>
@@ -111,7 +116,7 @@ var isAdmin = {{ (user.role == 'admin') | tojson }};
 </div>
 
 {% if user.role == 'admin' %}
-<!-- Create Zone Modal -->
+<!-- Create Reverse Zone Modal -->
 <script>
 var zoneTemplateData = {
     {% for tmpl in zone_templates %}
@@ -126,15 +131,64 @@ var zoneTemplateData = {
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 };
+
+// Client-side network_to_arpa for preview (IPv4 + IPv6, best-effort)
+function networkToArpa(network) {
+    var parts = network.split('/');
+    if (parts.length !== 2) return null;
+    var ip = parts[0].trim();
+    var prefix = parseInt(parts[1].trim());
+
+    // IPv4
+    var octs = ip.split('.');
+    if (octs.length === 4 && !isNaN(prefix) && prefix >= 0 && prefix <= 32) {
+        var significant = Math.ceil(prefix / 8);
+        var reversed = octs.slice(0, significant).reverse();
+        return reversed.join('.') + '.in-addr.arpa.';
+    }
+
+    // IPv6
+    if (ip.indexOf(':') !== -1 && !isNaN(prefix) && prefix >= 0 && prefix <= 128) {
+        // Expand compressed IPv6
+        var addr = ip;
+        // Handle :: expansion
+        if (addr.indexOf('::') !== -1) {
+            var halves = addr.split('::');
+            var left = halves[0] ? halves[0].split(':') : [];
+            var right = halves[1] ? halves[1].split(':') : [];
+            var missing = 8 - left.length - right.length;
+            var mid = [];
+            for (var i = 0; i < missing; i++) mid.push('0000');
+            addr = left.concat(mid).concat(right).join(':');
+        }
+        var groups = addr.split(':').map(function(g) {
+            return ('0000' + g).slice(-4);
+        });
+        if (groups.length !== 8) return null;
+        var nibbles = groups.join('').split('');
+        var nibbleCount = Math.ceil(prefix / 4);
+        var reversed = nibbles.slice(0, nibbleCount).reverse();
+        return reversed.join('.') + '.ip6.arpa.';
+    }
+
+    return null;
+}
 </script>
-<div id="create-zone-modal" class="modal-overlay" style="display:none"
+<div id="create-reverse-zone-modal" class="modal-overlay" style="display:none"
     x-data="{
-        name: '', kind: 'Native', server_id: '',
+        mode: 'network',
+        network: '', name: '', kind: 'Native', server_id: '',
         nameservers: '', masters: '',
         soa_mname: '', soa_rname: '',
         soa_refresh: 3600, soa_retry: 900, soa_expire: 604800, soa_ttl: 300,
         loading: false, error: '',
         get isSlave() { return this.kind === 'Slave'; },
+        get arpaPreview() {
+            if (this.mode === 'network' && this.network) {
+                return networkToArpa(this.network) || '(invalid network)';
+            }
+            return '';
+        },
         applyTemplate(id) {
             if (!id) return;
             var t = zoneTemplateData[id];
@@ -148,16 +202,17 @@ var zoneTemplateData = {
             this.soa_ttl = t.soa_ttl;
         }
     }">
-    <div class="modal" style="max-width: 600px;">
+    <div class="modal" style="max-width: 620px;">
         <div class="modal-header">
-            <span>Create Zone</span>
+            <span>Create Reverse Zone</span>
             <button class="btn btn-sm" @click="$el.closest('.modal-overlay').style.display='none'">&times;</button>
         </div>
         <form @submit.prevent="
             loading = true; error = '';
             let ns = nameservers.split('\n').map(s=>s.trim()).filter(Boolean);
             let ms = masters.split('\n').map(s=>s.trim()).filter(Boolean);
-            let body = { name, kind, server_id: parseInt(server_id), nameservers: isSlave ? [] : ns, masters: ms };
+            let body = { name: mode === 'manual' ? name : '', kind, server_id: parseInt(server_id), nameservers: isSlave ? [] : ns, masters: ms };
+            if (mode === 'network') { body.network = network; delete body.name; body.name = ''; }
             if (!isSlave) {
                 body.soa_mname = soa_mname;
                 body.soa_rname = soa_rname;
@@ -172,11 +227,34 @@ var zoneTemplateData = {
         ">
             <div class="modal-body">
                 <template x-if="error"><div class="flash flash-error" x-text="error"></div></template>
-                <div class="grid-2">
-                    <div class="form-group" style="grid-column: span 2;">
-                        <label>Zone Name</label>
-                        <input type="text" x-model="name" placeholder="example.com" required>
+
+                <!-- Mode selector -->
+                <div class="form-group">
+                    <label>Zone Name Input Mode</label>
+                    <div style="display:flex; gap:1rem; margin-top:0.35rem;">
+                        <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-weight:normal;">
+                            <input type="radio" x-model="mode" value="network"> IP Network (e.g. 192.168.1.0/24 or 2001:db8::/32)
+                        </label>
+                        <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-weight:normal;">
+                            <input type="radio" x-model="mode" value="manual"> Manual ARPA name
+                        </label>
                     </div>
+                </div>
+
+                <div class="grid-2">
+                    <template x-if="mode === 'network'">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>IP Network</label>
+                        <input type="text" x-model="network" placeholder="192.168.1.0/24 or 2001:db8::/32" required>
+                        <div x-show="arpaPreview" class="text-dim text-sm mt-1" x-text="'→ ' + arpaPreview"></div>
+                    </div>
+                    </template>
+                    <template x-if="mode === 'manual'">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>ARPA Zone Name</label>
+                        <input type="text" x-model="name" placeholder="1.168.192.in-addr.arpa" required>
+                    </div>
+                    </template>
                     <div class="form-group">
                         <label>Kind</label>
                         <select x-model="kind">
