@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+</div>
+
+<div class="grid-3">
+    <div class="card">
+        <div class="card-body" style="text-align:center; padding: 2rem;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: var(--primary);">{{ zone_count }}</div>
+            <div class="text-dim mt-1">Zones</div>
+        </div>
+    </div>
+    {% if user.role == 'admin' %}
+    <div class="card">
+        <div class="card-body" style="text-align:center; padding: 2rem;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: var(--success);">{{ user_count }}</div>
+            <div class="text-dim mt-1">Users</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body" style="text-align:center; padding: 2rem;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: var(--warning);">{{ dnssec_count }}</div>
+            <div class="text-dim mt-1">DNSSEC Signed Zones</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if recent_audit %}
+<div class="card mt-2">
+    <div class="card-header">Recent Activity</div>
+    <table>
+        <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Zone</th></tr></thead>
+        <tbody>
+        {% for entry in recent_audit %}
+        <tr>
+            <td class="text-sm text-dim">{{ entry.created_at }}</td>
+            <td>{{ entry.username or 'system' }}</td>
+            <td><span class="badge badge-blue">{{ entry.action }}</span></td>
+            <td class="mono">{{ entry.zone_name or '-' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% for srv in server_infos %}
+<div class="card mt-2">
+    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>{{ srv.name }}</span>
+        {% if srv.connected %}
+        <span class="badge badge-green">Connected</span>
+        {% else %}
+        <span class="badge badge-gray">Unreachable</span>
+        {% endif %}
+    </div>
+    {% if srv.connected %}
+    <div class="card-body">
+        <div class="grid-2">
+            <div><span class="text-dim text-sm">Version:</span> {{ srv.server_info.version }}</div>
+            <div><span class="text-dim text-sm">Server ID:</span> {{ srv.server_info.id }}</div>
+            <div><span class="text-dim text-sm">Daemon Type:</span> {{ srv.server_info.daemon_type }}</div>
+            <div><span class="text-dim text-sm">Zones:</span> {{ srv.zone_count }} ({{ srv.dnssec_count }} DNSSEC signed)</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,576 @@
+{% extends "base.html" %}
+{% block title %}Tools — PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>DNS Tools</h1>
+</div>
+
+<div x-data="toolsPage()" x-init="init()">
+    <!-- Tab bar -->
+    <div class="tabs">
+        <button class="tab" :class="{ active: tab === 'axfr' }" @click="tab = 'axfr'; resetResults()">Zone Transfer (AXFR)</button>
+        <button class="tab" :class="{ active: tab === 'lookup' }" @click="tab = 'lookup'; resetResults()">Record Lookup</button>
+    </div>
+
+    <!-- AXFR tab -->
+    <div x-show="tab === 'axfr'">
+        <div class="card mb-2">
+            <div class="card-header">Zone Transfer (AXFR)</div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Zone (FQDN)</label>
+                    {% if accessible_zones %}
+                    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                        <select @change="if($event.target.value) axfr.zone = $event.target.value" style="width:auto;">
+                            <option value="">— select zone —</option>
+                            {% for z in accessible_zones %}
+                            <option value="{{ z }}">{{ z }}</option>
+                            {% endfor %}
+                        </select>
+                        <span class="text-dim" style="font-size:0.85em;">or</span>
+                        <input type="text" x-model="axfr.zone" placeholder="example.com." style="width:16rem;" />
+                    </div>
+                    {% else %}
+                    <input type="text" x-model="axfr.zone" placeholder="example.com." />
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label>Servers</label>
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.4rem;">
+                        <button class="btn btn-sm" @click="selectAll('axfr')">Select All</button>
+                        <button class="btn btn-sm" @click="selectNone('axfr')">None</button>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                        {% for srv in active_servers %}
+                        <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                            <input type="checkbox" :value="{{ srv.id }}" x-model="axfr.serverIds" />
+                            {{ srv.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Custom servers (IP or hostname, optional)</label>
+                    <div style="display:flex; flex-direction:column; gap:0.3rem; margin-bottom:0.4rem;">
+                        <template x-for="(h, i) in axfr.customHosts" :key="i">
+                            <div style="display:flex; gap:0.4rem; align-items:center;">
+                                <input type="text" x-model="axfr.customHosts[i]" placeholder="192.0.2.1" style="width:16rem;" />
+                                <button class="btn btn-sm" @click="axfr.customHosts.splice(i, 1)" title="Remove">&times;</button>
+                            </div>
+                        </template>
+                    </div>
+                    <button class="btn btn-sm" @click="axfr.customHosts.push('')">+ Add server</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" @click="runAxfr()" :disabled="loading">
+                        <span x-show="!loading">Run AXFR</span>
+                        <span x-show="loading">Running…</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AXFR results -->
+        <template x-if="results.length > 0">
+            <div>
+                <div style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center; flex-wrap:wrap;">
+                    <span class="text-dim text-sm" x-text="results.length + ' server(s)'"></span>
+                    <template x-if="results.length >= 2">
+                        <button class="btn btn-sm" @click="compareMode = !compareMode" x-text="compareMode ? 'Hide Compare' : 'Compare'"></button>
+                    </template>
+                    <button class="btn btn-sm" @click="plainTextMode = !plainTextMode" x-text="plainTextMode ? 'Hide Plain Text' : 'Plain Text'"></button>
+                    <label style="display:flex; align-items:center; gap:0.3rem; font-size:0.85em; cursor:pointer;">
+                        <input type="checkbox" x-model="axfr.ignoreDnssec" />
+                        Ignore DNSSEC records
+                    </label>
+                </div>
+
+                <!-- Compare view -->
+                <template x-if="compareMode && results.length >= 2">
+                    <div class="card mb-2">
+                        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>Compare: <span x-text="results.map(r => r.server_name).join(' vs ')"></span></span>
+                            <button class="btn btn-sm" @click="axfrCompareText = !axfrCompareText" x-text="axfrCompareText ? 'Table View' : 'Text Diff'"></button>
+                        </div>
+                        <div class="card-body">
+                            <!-- Table compare -->
+                            <template x-if="!axfrCompareText">
+                                <div>
+                                    <template x-if="axfrMismatch()">
+                                        <div class="flash flash-error">Differences detected between servers.</div>
+                                    </template>
+                                    <template x-if="!axfrMismatch()">
+                                        <div class="flash flash-success">Records match across all servers.</div>
+                                    </template>
+                                    <table>
+                                        <thead><tr>
+                                            <th>Name</th><th>TTL</th><th>Type</th><th>RData</th><th>Servers</th>
+                                        </tr></thead>
+                                        <tbody>
+                                            <template x-for="row in axfrCompareRows()" :key="row.name + row.rtype + row.rdata">
+                                                <tr :style="row.missing ? 'color:var(--danger)' : (row.ttlMismatch ? 'color:var(--warning,#c8920a)' : '')">
+                                                    <td x-text="row.name"></td>
+                                                    <td x-text="row.ttlDisplay" :title="row.ttlMismatch ? 'TTL differs between servers' : ''"></td>
+                                                    <td x-text="row.rtype"></td>
+                                                    <td class="mono" x-text="row.rdata"></td>
+                                                    <td x-text="row.presentOn.join(', ')"></td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </template>
+                            <!-- Text diff -->
+                            <template x-if="axfrCompareText">
+                                <pre class="mono" style="white-space:pre-wrap; line-height:1.6;">
+                                    <template x-for="line in axfrDiff()" :key="line.text + line.side">
+                                        <span :style="line.color ? 'color:' + line.color : ''" x-text="line.text + '\n'"></span>
+                                    </template>
+                                </pre>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Per-server cards -->
+                <template x-for="r in results" :key="r.server_id">
+                    <div class="card mb-2">
+                        <div class="card-header" x-text="r.server_name"></div>
+                        <div class="card-body">
+                            <template x-if="r.error">
+                                <div class="flash flash-error" x-text="r.error"></div>
+                            </template>
+                            <template x-if="!r.error">
+                                <div>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+                                        <span class="text-dim text-sm" x-text="(r.records || []).length + ' record(s)'"></span>
+                                        <button class="btn btn-sm" @click="copyText(r.text || '', $el)">Copy</button>
+                                    </div>
+                                    <template x-if="!plainTextMode">
+                                        <div>
+                                            <template x-if="(r.records || []).length === 0">
+                                                <div class="empty-state">No records found</div>
+                                            </template>
+                                            <template x-if="(r.records || []).length > 0">
+                                                <table>
+                                                    <thead><tr>
+                                                        <th style="cursor:pointer;user-select:none" @click="axfrSortBy('name')" x-text="'Name ' + axfrSortIcon('name')"></th>
+                                                        <th style="cursor:pointer;user-select:none" @click="axfrSortBy('ttl')" x-text="'TTL ' + axfrSortIcon('ttl')"></th>
+                                                        <th style="cursor:pointer;user-select:none" @click="axfrSortBy('rtype')" x-text="'Type ' + axfrSortIcon('rtype')"></th>
+                                                        <th>RData</th>
+                                                    </tr></thead>
+                                                    <tbody>
+                                                        <template x-for="rec in axfrSortedRecords(axfrFilterRecords(r.records || []))" :key="rec.name + rec.rtype + rec.rdata">
+                                                            <tr>
+                                                                <td x-text="rec.name"></td>
+                                                                <td x-text="rec.ttl"></td>
+                                                                <td x-text="rec.rtype"></td>
+                                                                <td class="mono" x-text="rec.rdata"></td>
+                                                            </tr>
+                                                        </template>
+                                                    </tbody>
+                                                </table>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template x-if="plainTextMode">
+                                        <textarea class="mono" readonly style="width:100%; min-height:16rem; resize:vertical; white-space:pre; overflow:auto; box-sizing:border-box;" x-text="r.text || ''"></textarea>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+
+    <!-- Lookup tab -->
+    <div x-show="tab === 'lookup'">
+        <div class="card mb-2">
+            <div class="card-header">Record Lookup</div>
+            <div class="card-body">
+                {% if accessible_zones %}
+                <div class="form-group">
+                    <label>Zone (optional)</label>
+                    <select @change="onLookupZoneChange($event.target.value)" style="width:auto;">
+                        <option value="">— any zone / enter name below —</option>
+                        {% for z in accessible_zones %}
+                        <option value="{{ z }}">{{ z }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="form-group">
+                    <label>Name (FQDN)</label>
+                    <input type="text" x-model="lookup.name" placeholder="www.example.com." />
+                </div>
+                <div class="form-group">
+                    <label>Record Type</label>
+                    <select x-model="lookup.rtype" style="width:auto;">
+                        {% for rt in record_types %}
+                        <option value="{{ rt }}">{{ rt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Servers</label>
+                    <div style="display:flex; gap:0.5rem; margin-bottom:0.4rem;">
+                        <button class="btn btn-sm" @click="selectAll('lookup')">Select All</button>
+                        <button class="btn btn-sm" @click="selectNone('lookup')">None</button>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                        {% for srv in active_servers %}
+                        <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                            <input type="checkbox" :value="{{ srv.id }}" x-model="lookup.serverIds" />
+                            {{ srv.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Custom servers (IP or hostname, optional)</label>
+                    <div style="display:flex; flex-direction:column; gap:0.3rem; margin-bottom:0.4rem;">
+                        <template x-for="(h, i) in lookup.customHosts" :key="i">
+                            <div style="display:flex; gap:0.4rem; align-items:center;">
+                                <input type="text" x-model="lookup.customHosts[i]" placeholder="192.0.2.1" style="width:16rem;" />
+                                <button class="btn btn-sm" @click="lookup.customHosts.splice(i, 1)" title="Remove">&times;</button>
+                            </div>
+                        </template>
+                    </div>
+                    <button class="btn btn-sm" @click="lookup.customHosts.push('')">+ Add server</button>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" @click="runLookup()" :disabled="loading">
+                        <span x-show="!loading">Lookup</span>
+                        <span x-show="loading">Running…</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lookup results -->
+        <template x-if="results.length > 0">
+            <div>
+                <div style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center;">
+                    <span class="text-dim text-sm" x-text="results.length + ' server(s)'"></span>
+                    <template x-if="results.length >= 2">
+                        <button class="btn btn-sm" @click="compareMode = !compareMode" x-text="compareMode ? 'Hide Compare' : 'Compare'"></button>
+                    </template>
+                    <button class="btn btn-sm" @click="plainTextMode = !plainTextMode" x-text="plainTextMode ? 'Hide Plain Text' : 'Plain Text'"></button>
+                </div>
+
+                <!-- Compare view -->
+                <template x-if="compareMode && results.length >= 2">
+                    <div class="card mb-2">
+                        <div class="card-header">Compare: <span x-text="results[0].server_name"></span> vs <span x-text="results[1].server_name"></span></div>
+                        <div class="card-body">
+                            <template x-if="lookupMismatch()">
+                                <div class="flash flash-error">Mismatch detected between servers.</div>
+                            </template>
+                            <template x-if="!lookupMismatch()">
+                                <div class="flash flash-success">Results match across servers.</div>
+                            </template>
+                            <table>
+                                <thead><tr><th>Name</th><th>TTL</th><th>Type</th><th>RData</th><th>Servers</th></tr></thead>
+                                <tbody>
+                                    <template x-for="row in lookupCompareRows()" :key="row.rdata">
+                                        <tr :style="row.missing ? 'color:var(--danger)' : ''">
+                                            <td x-text="row.name"></td>
+                                            <td x-text="row.ttl"></td>
+                                            <td x-text="row.rtype"></td>
+                                            <td class="mono" x-text="row.rdata"></td>
+                                            <td x-text="row.servers.join(', ')"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- Per-server cards -->
+                <template x-for="r in results" :key="r.server_id">
+                    <div class="card mb-2">
+                        <div class="card-header" x-text="r.server_name"></div>
+                        <div class="card-body">
+                            <template x-if="r.error">
+                                <div class="flash flash-error" x-text="r.error"></div>
+                            </template>
+                            <template x-if="!r.error && !plainTextMode">
+                                <div>
+                                    <template x-if="r.answers.length === 0">
+                                        <div class="empty-state">No records found</div>
+                                    </template>
+                                    <template x-if="r.answers.length > 0">
+                                        <table>
+                                            <thead><tr><th>Name</th><th>TTL</th><th>Type</th><th>RData</th></tr></thead>
+                                            <tbody>
+                                                <template x-for="a in r.answers" :key="a.rdata">
+                                                    <tr>
+                                                        <td x-text="a.name"></td>
+                                                        <td x-text="a.ttl"></td>
+                                                        <td x-text="a.rtype"></td>
+                                                        <td class="mono" x-text="a.rdata"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="!r.error && plainTextMode">
+                                <textarea class="mono" readonly style="width:100%; min-height:8rem; resize:vertical; white-space:pre; overflow:auto; box-sizing:border-box;" x-text="lookupResultText(r)"></textarea>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+</div>
+
+<script>
+function toolsPage() {
+    return {
+        tab: 'axfr',
+        loading: false,
+        compareMode: false,
+        plainTextMode: false,
+        axfrCompareText: false,
+        results: [],
+        axfr: { zone: '', serverIds: [], customHosts: [], ignoreDnssec: false },
+        dnssecTypes: new Set(['RRSIG', 'DNSKEY', 'NSEC', 'NSEC3', 'NSEC3PARAM']),
+        lookup: { name: '', rtype: 'A', serverIds: [], customHosts: [] },
+        axfrSort: { col: null, dir: 1 },
+
+        init() {
+            // Pre-select all servers
+            const allIds = {{ active_servers | map(attribute='id') | list | tojson }};
+            this.axfr.serverIds = [...allIds];
+            this.lookup.serverIds = [...allIds];
+        },
+
+        resetResults() {
+            this.results = [];
+            this.compareMode = false;
+            this.plainTextMode = false;
+            this.axfrCompareText = false;
+            this.axfrSort = { col: null, dir: 1 };
+        },
+
+        axfrFilterRecords(records) {
+            if (!this.axfr.ignoreDnssec) return records;
+            return records.filter(r => !this.dnssecTypes.has(r.rtype));
+        },
+
+        axfrSortedRecords(records) {
+            if (!this.axfrSort.col) return records;
+            const col = this.axfrSort.col;
+            return [...records].sort((a, b) => {
+                let va = a[col], vb = b[col];
+                if (col === 'ttl') { va = Number(va); vb = Number(vb); }
+                else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
+                if (va < vb) return -this.axfrSort.dir;
+                if (va > vb) return this.axfrSort.dir;
+                return 0;
+            });
+        },
+
+        axfrSortBy(col) {
+            if (this.axfrSort.col === col) this.axfrSort.dir *= -1;
+            else { this.axfrSort.col = col; this.axfrSort.dir = 1; }
+        },
+
+        axfrSortIcon(col) {
+            if (this.axfrSort.col !== col) return '↕';
+            return this.axfrSort.dir === 1 ? '↑' : '↓';
+        },
+
+        selectAll(which) {
+            const allIds = {{ active_servers | map(attribute='id') | list | tojson }};
+            this[which].serverIds = [...allIds];
+        },
+
+        selectNone(which) {
+            this[which].serverIds = [];
+        },
+
+        onLookupZoneChange(zone) {
+            if (zone) this.lookup.name = zone;
+        },
+
+        async runAxfr() {
+            const customHosts = this.axfr.customHosts.map(h => h.trim()).filter(Boolean);
+            if (!this.axfr.zone.trim()) return;
+            if (this.axfr.serverIds.length === 0 && customHosts.length === 0) return;
+            this.loading = true;
+            this.results = [];
+            this.compareMode = false;
+            this.plainTextMode = false;
+            try {
+                const body = { zone_id: this.axfr.zone.trim(), server_ids: this.axfr.serverIds, custom_hosts: customHosts };
+                const res = await fetch('/api/tools/axfr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.detail || 'Request failed');
+                } else {
+                    this.results = data.results;
+                }
+            } catch (e) {
+                alert('Network error: ' + e.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async runLookup() {
+            const customHosts = this.lookup.customHosts.map(h => h.trim()).filter(Boolean);
+            if (!this.lookup.name.trim()) return;
+            if (this.lookup.serverIds.length === 0 && customHosts.length === 0) return;
+            this.loading = true;
+            this.results = [];
+            this.compareMode = false;
+            this.plainTextMode = false;
+            try {
+                const body = { name: this.lookup.name.trim(), rtype: this.lookup.rtype, server_ids: this.lookup.serverIds, custom_hosts: customHosts };
+                const res = await fetch('/api/tools/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.detail || 'Request failed');
+                } else {
+                    this.results = data.results;
+                }
+            } catch (e) {
+                alert('Network error: ' + e.message);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        axfrCompareRows() {
+            if (this.results.length < 2) return [];
+            const serverNames = this.results.map(r => r.server_name);
+            const map = {};
+            for (const r of this.results) {
+                for (const rec of this.axfrFilterRecords(r.records || [])) {
+                    const key = rec.name + '\x00' + rec.rtype + '\x00' + rec.rdata;
+                    if (!map[key]) map[key] = { name: rec.name, rtype: rec.rtype, rdata: rec.rdata, servers: {}, ttls: {} };
+                    map[key].servers[r.server_name] = true;
+                    map[key].ttls[r.server_name] = rec.ttl;
+                }
+            }
+            return Object.values(map).map(row => {
+                const presentOn = serverNames.filter(n => row.servers[n]);
+                const missing = presentOn.length < serverNames.length;
+                const ttlValues = presentOn.map(n => row.ttls[n]);
+                const ttlMismatch = !missing && new Set(ttlValues).size > 1;
+                const ttlDisplay = ttlMismatch ? ttlValues.join('/') : String(ttlValues[0] ?? '');
+                return { name: row.name, rtype: row.rtype, rdata: row.rdata, presentOn, missing, ttlMismatch, ttlDisplay };
+            }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.rtype < b.rtype ? -1 : a.rtype > b.rtype ? 1 : 0);
+        },
+
+        axfrMismatch() {
+            return this.axfrCompareRows().some(r => r.missing || r.ttlMismatch);
+        },
+
+        // Line-by-line text diff between first two AXFR results
+        axfrDiff() {
+            if (this.results.length < 2) return [];
+            const filterLine = (line) => {
+                if (!this.axfr.ignoreDnssec) return true;
+                const parts = line.split('\t');
+                return parts.length < 4 || !this.dnssecTypes.has(parts[3]);
+            };
+            const linesA = new Set((this.results[0].text || '').split('\n').filter(filterLine));
+            const linesB = new Set((this.results[1].text || '').split('\n').filter(filterLine));
+            const all = new Set([...linesA, ...linesB]);
+            const out = [];
+            for (const line of all) {
+                if (!line) continue;
+                const inA = linesA.has(line);
+                const inB = linesB.has(line);
+                if (inA && inB) out.push({ text: line, color: 'var(--text-dim)' });
+                else if (inA) out.push({ text: '- ' + line, color: 'var(--danger)' });
+                else out.push({ text: '+ ' + line, color: 'var(--success)' });
+            }
+            return out;
+        },
+
+        // Lookup compare: union of rdata across first two servers
+        lookupCompareRows() {
+            if (this.results.length < 2) return [];
+            const map = {};
+            for (let i = 0; i < Math.min(2, this.results.length); i++) {
+                const r = this.results[i];
+                for (const a of (r.answers || [])) {
+                    if (!map[a.rdata]) map[a.rdata] = { ...a, servers: [] };
+                    map[a.rdata].servers.push(r.server_name);
+                }
+            }
+            const names = [this.results[0].server_name, this.results[1].server_name];
+            return Object.values(map).map(row => ({
+                ...row,
+                missing: row.servers.length < 2 || !names.every(n => row.servers.includes(n)),
+            }));
+        },
+
+        lookupMismatch() {
+            return this.lookupCompareRows().some(r => r.missing);
+        },
+
+        lookupResultText(r) {
+            return (r.answers || []).map(a => `${a.name}\t${a.ttl}\tIN\t${a.rtype}\t${a.rdata}`).join('\n');
+        },
+
+        // Plain-text download helpers
+        _buildAxfrText() {
+            return this.results.map(r =>
+                `=== ${r.server_name} ===\n` + (r.error ? `ERROR: ${r.error}` : r.text || '') + '\n'
+            ).join('\n');
+        },
+
+        _buildLookupText() {
+            return this.results.map(r => {
+                let s = `=== ${r.server_name} ===\n`;
+                if (r.error) s += `ERROR: ${r.error}`;
+                else s += (r.answers || []).map(a => `${a.name}\t${a.ttl}\tIN\t${a.rtype}\t${a.rdata}`).join('\n');
+                return s + '\n';
+            }).join('\n');
+        },
+
+        downloadAxfrText() {
+            this._download(this._buildAxfrText(), `axfr-${this.axfr.zone || 'zone'}.txt`);
+        },
+
+        downloadLookupText() {
+            this._download(this._buildLookupText(), `lookup-${this.lookup.name || 'query'}.txt`);
+        },
+
+        copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = orig; }, 1500);
+            });
+        },
+
+        _download(text, filename) {
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename; a.click();
+            URL.revokeObjectURL(url);
+        },
+    };
+}
+</script>
+{% endblock %}

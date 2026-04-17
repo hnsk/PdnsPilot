@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Login - PowerAdmin{% endblock %}
+{% block content %}
+<div style="max-width: 400px; margin: 4rem auto;">
+    <div class="card">
+        <div class="card-header">
+            <div class="brand" style="display: flex; align-items: center; gap: 0.5rem;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                PowerAdmin Login
+            </div>
+        </div>
+        <div class="card-body" x-data="{ username: '', password: '', error: '', loading: false }">
+            {% if error %}
+            <div class="flash flash-error">{{ error }}</div>
+            {% endif %}
+            <template x-if="error">
+                <div class="flash flash-error" x-text="error"></div>
+            </template>
+            <form @submit.prevent="
+                loading = true; error = '';
+                fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                }).then(r => {
+                    if (r.ok) { window.location.href = '/'; }
+                    else { r.json().then(d => { error = d.detail || 'Login failed'; loading = false; }); }
+                }).catch(() => { error = 'Connection error'; loading = false; });
+            ">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" x-model="username" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" x-model="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%" :disabled="loading">
+                    <span x-show="!loading">Sign In</span>
+                    <span x-show="loading">Signing in...</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

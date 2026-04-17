@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Zones - PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Zones</h1>
+    {% if user.role == 'admin' %}
+    <button class="btn btn-primary" onclick="document.getElementById('create-zone-modal').style.display='flex'">+ New Zone</button>
+    {% endif %}
+</div>
+
+<div class="card" x-data="{ search: '' }">
+    <div class="card-header">
+        <input type="text" x-model="search" placeholder="Filter zones..." style="width: 280px; padding: 0.3rem 0.6rem; font-size: 0.875rem;">
+        <span class="text-dim text-sm">{{ zones | length }} zone(s)</span>
+    </div>
+    {% if zones %}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Kind</th>
+                <th>Serial</th>
+                <th>DNSSEC</th>
+                <th>Server</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for z in zones %}
+        <tr x-show="!search || '{{ z.name }}'.toLowerCase().includes(search.toLowerCase())">
+            <td class="mono"><a href="/zones/{{ z.name }}?server_id={{ z._server_id }}">{{ z.name }}</a></td>
+            <td>
+                {% if z.kind == 'Native' %}
+                <span class="badge badge-blue">{{ z.kind }}</span>
+                {% elif z.kind == 'Master' or z.kind == 'Primary' %}
+                <span class="badge badge-green">{{ z.kind }}</span>
+                {% elif z.kind == 'Slave' or z.kind == 'Secondary' %}
+                <span class="badge badge-yellow">{{ z.kind }}</span>
+                {% else %}
+                <span class="badge badge-gray">{{ z.kind }}</span>
+                {% endif %}
+            </td>
+            <td class="mono text-sm text-dim">{{ z.serial or '-' }}</td>
+            <td>
+                {% if z.dnssec %}
+                <span class="badge badge-green">yes</span>
+                {% else %}
+                <span class="badge badge-gray">no</span>
+                {% endif %}
+            </td>
+            <td class="text-sm text-dim">{{ z._server_name }}</td>
+            <td>
+                <div class="btn-group">
+                    <a href="/zones/{{ z.name }}?server_id={{ z._server_id }}" class="btn btn-sm">Edit</a>
+                    {% if user.role == 'admin' %}
+                    <a href="/zones/{{ z.name }}/export?server_id={{ z._server_id }}" class="btn btn-sm">Export</a>
+                    <button class="btn btn-danger btn-sm" x-data
+                        @click="if(confirm('Delete zone {{ z.name }}?')) {
+                            fetch('/api/zones/{{ z.name }}?server_id={{ z._server_id }}', {method:'DELETE'})
+                                .then(r => { if(r.ok) location.reload(); else r.json().then(d => alert(d.detail || 'Error')); });
+                        }">Delete</button>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No zones found.</p>
+        {% if user.role == 'admin' %}
+        <p class="text-dim text-sm mt-1">Create a zone to get started.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if user.role == 'admin' %}
+<!-- Create Zone Modal -->
+<div id="create-zone-modal" class="modal-overlay" style="display:none"
+    x-data="{
+        name: '', kind: 'Native', server_id: '',
+        nameservers: '', soa_mname: '', soa_rname: '',
+        soa_refresh: 3600, soa_retry: 900, soa_expire: 604800, soa_ttl: 300,
+        template_id: '',
+        loading: false, error: '',
+        get useTemplate() { return this.template_id !== ''; }
+    }">
+    <div class="modal" style="max-width: 600px;">
+        <div class="modal-header">
+            <span>Create Zone</span>
+            <button class="btn btn-sm" onclick="this.closest('.modal-overlay').style.display='none'">&times;</button>
+        </div>
+        <form @submit.prevent="
+            loading = true; error = '';
+            let body = { name, kind, server_id: parseInt(server_id), nameservers: nameservers.split('\n').map(s=>s.trim()).filter(Boolean), masters: [] };
+            if (template_id) { body.template_id = parseInt(template_id); }
+            else if (soa_mname && soa_rname) { body.soa_mname = soa_mname; body.soa_rname = soa_rname; body.soa_refresh = parseInt(soa_refresh); body.soa_retry = parseInt(soa_retry); body.soa_expire = parseInt(soa_expire); body.soa_ttl = parseInt(soa_ttl); }
+            fetch('/api/zones', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+                .then(r => r.ok ? location.reload() : r.json().then(d => { error = d.detail || 'Failed'; loading = false; }))
+                .catch(() => { error = 'Connection error'; loading = false; });
+        ">
+            <div class="modal-body">
+                <template x-if="error"><div class="flash flash-error" x-text="error"></div></template>
+                <div class="grid-2">
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Zone Name</label>
+                        <input type="text" x-model="name" placeholder="example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Kind</label>
+                        <select x-model="kind">
+                            <option value="Native">Native</option>
+                            <option value="Master">Master / Primary</option>
+                            <option value="Slave">Slave / Secondary</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Server</label>
+                        <select x-model="server_id" required>
+                            <option value="">Select server...</option>
+                            {% for srv in pdns_servers %}
+                            <option value="{{ srv.id }}">{{ srv.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if zone_templates %}
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label>Zone Template (optional)</label>
+                        <select x-model="template_id">
+                            <option value="">No template (manual SOA)</option>
+                            {% for tmpl in zone_templates %}
+                            <option value="{{ tmpl.id }}">{{ tmpl.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                </div>
+                <template x-if="!useTemplate">
+                    <div>
+                        <div class="form-group">
+                            <label>Nameservers (one per line)</label>
+                            <textarea x-model="nameservers" rows="3" placeholder="ns1.example.com&#10;ns2.example.com"></textarea>
+                        </div>
+                        <div class="grid-2">
+                            <div class="form-group">
+                                <label>SOA Primary (mname)</label>
+                                <input type="text" x-model="soa_mname" placeholder="ns1.example.com">
+                            </div>
+                            <div class="form-group">
+                                <label>SOA Email (rname)</label>
+                                <input type="text" x-model="soa_rname" placeholder="hostmaster.example.com">
+                            </div>
+                            <div class="form-group">
+                                <label>Refresh</label>
+                                <input type="number" x-model="soa_refresh">
+                            </div>
+                            <div class="form-group">
+                                <label>Retry</label>
+                                <input type="number" x-model="soa_retry">
+                            </div>
+                            <div class="form-group">
+                                <label>Expire</label>
+                                <input type="number" x-model="soa_expire">
+                            </div>
+                            <div class="form-group">
+                                <label>Minimum TTL</label>
+                                <input type="number" x-model="soa_ttl">
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="this.closest('.modal-overlay').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-primary" :disabled="loading">
+                    <span x-show="!loading">Create Zone</span>
+                    <span x-show="loading">Creating...</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

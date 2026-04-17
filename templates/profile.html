@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Profile – PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>My Profile</h1>
+</div>
+
+<div style="max-width: 480px;">
+    <div class="card">
+        <div class="card-header">Account</div>
+        <div class="card-body">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" value="{{ user.username }}" disabled style="opacity:0.6;">
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <input type="text" value="{{ user.role }}" disabled style="opacity:0.6;">
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-2" x-data="prefsForm()">
+        <div class="card-header">Preferences</div>
+        <div class="card-body">
+            <template x-if="prefError">
+                <div class="flash flash-error" x-text="prefError"></div>
+            </template>
+            <template x-if="prefSuccess">
+                <div class="flash flash-success">Preferences saved.</div>
+            </template>
+            <div class="form-group">
+                <label>Default Record TTL (seconds)</label>
+                <input type="number" x-model.number="defaultTTL" min="1" style="max-width:140px;">
+                <p style="margin:.4rem 0 0; font-size:.8rem; color:var(--text-dim);">
+                    Overrides the global default ({{ global_default_ttl }}s) for your account. Clear to use the global default.
+                </p>
+            </div>
+            <div style="display:flex; gap:.5rem; align-items:center;">
+                <button class="btn btn-primary" @click="save()" :disabled="prefLoading">
+                    <span x-text="prefLoading ? 'Saving…' : 'Save'"></span>
+                </button>
+                <button class="btn" @click="clear()" :disabled="prefLoading">Use global default</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-2" x-data="pwForm()">
+        <div class="card-header">Change Password</div>
+        <div class="card-body">
+            <template x-if="error">
+                <div class="flash flash-error" x-text="error"></div>
+            </template>
+            <template x-if="success">
+                <div class="flash flash-success">Password changed.</div>
+            </template>
+            <div class="form-group">
+                <label>Current password</label>
+                <input type="password" x-model="current" placeholder="Current password">
+            </div>
+            <div class="form-group">
+                <label>New password</label>
+                <input type="password" x-model="newpw" placeholder="New password">
+            </div>
+            <div class="form-group">
+                <label>Confirm new password</label>
+                <input type="password" x-model="confirm" placeholder="Confirm new password">
+            </div>
+            <button class="btn btn-primary" @click="submit()" :disabled="loading">
+                <span x-text="loading ? 'Saving…' : 'Change Password'"></span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function prefsForm() {
+    return {
+        defaultTTL: {{ user.default_ttl if user.default_ttl is not none else global_default_ttl }},
+        prefLoading: false, prefError: null, prefSuccess: false,
+        async save() {
+            this.prefError = null;
+            this.prefSuccess = false;
+            if (!this.defaultTTL || this.defaultTTL < 1) {
+                this.prefError = 'TTL must be at least 1.'; return;
+            }
+            this.prefLoading = true;
+            try {
+                const res = await fetch('/api/users/me/preferences', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ default_ttl: this.defaultTTL }),
+                });
+                if (res.ok) { this.prefSuccess = true; }
+                else { const d = await res.json(); this.prefError = d.detail || 'Failed to save.'; }
+            } catch { this.prefError = 'Network error.'; }
+            finally { this.prefLoading = false; }
+        },
+        async clear() {
+            this.prefError = null;
+            this.prefSuccess = false;
+            this.prefLoading = true;
+            try {
+                const res = await fetch('/api/users/me/preferences', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ default_ttl: null }),
+                });
+                if (res.ok) {
+                    this.defaultTTL = {{ global_default_ttl }};
+                    this.prefSuccess = true;
+                } else { const d = await res.json(); this.prefError = d.detail || 'Failed.'; }
+            } catch { this.prefError = 'Network error.'; }
+            finally { this.prefLoading = false; }
+        }
+    };
+}
+
+function pwForm() {
+    return {
+        current: '', newpw: '', confirm: '',
+        loading: false, error: null, success: false,
+        async submit() {
+            this.error = null;
+            this.success = false;
+            if (!this.current || !this.newpw) {
+                this.error = 'All fields required.'; return;
+            }
+            if (this.newpw !== this.confirm) {
+                this.error = 'New passwords do not match.'; return;
+            }
+            this.loading = true;
+            try {
+                const res = await fetch('/api/users/me/password', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({current_password: this.current, new_password: this.newpw}),
+                });
+                if (res.ok) {
+                    this.success = true;
+                    this.current = ''; this.newpw = ''; this.confirm = '';
+                } else {
+                    const data = await res.json();
+                    this.error = data.detail || 'Failed to change password.';
+                }
+            } catch {
+                this.error = 'Network error.';
+            } finally {
+                this.loading = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

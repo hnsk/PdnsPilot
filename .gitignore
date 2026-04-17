@@ -1,0 +1,21 @@
+# Rust
+/target/
+Cargo.lock
+
+# Environment
+.env
+.env.*
+
+# SQLx prepared queries
+.sqlx/
+
+# Claude
+.claude/
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Docker
+docker-compose.override.yml

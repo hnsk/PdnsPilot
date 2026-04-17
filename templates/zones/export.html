@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Export {{ zone_id }} - PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Export: <span class="mono">{{ zone_id }}</span></h1>
+    <div class="btn-group">
+        <a href="/zones/{{ zone_id }}{% if server_id %}?server_id={{ server_id }}{% endif %}" class="btn">&larr; Back to Zone</a>
+        <button class="btn btn-primary" onclick="
+            var el = document.getElementById('export-content');
+            var blob = new Blob([el.textContent], {type: 'text/plain'});
+            var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = '{{ zone_id }}.zone'; a.click();
+        ">Download</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Zone File</div>
+    <div class="card-body">
+        <pre id="export-content" class="mono" style="background: var(--bg); padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre; font-size: 0.8rem; line-height: 1.5; max-height: 70vh; overflow-y: auto;">{{ export_data }}</pre>
+    </div>
+</div>
+{% endblock %}

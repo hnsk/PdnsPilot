@@ -1,0 +1,11 @@
+pub mod api_auth;
+pub mod api_audit;
+pub mod api_dnssec;
+pub mod api_metrics;
+pub mod api_pdns_servers;
+pub mod api_settings;
+pub mod api_tools;
+pub mod api_users;
+pub mod api_zone_templates;
+pub mod api_zones;
+pub mod views;

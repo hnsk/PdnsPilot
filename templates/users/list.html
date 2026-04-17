@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Users - PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Users</h1>
+    <button class="btn btn-primary" onclick="document.getElementById('create-user-modal').style.display='flex'">+ New User</button>
+</div>
+
+<div class="card">
+    {% if users %}
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Zones</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for u in users %}
+        <tr>
+            <td><a href="/users/{{ u.id }}">{{ u.username }}</a></td>
+            <td>
+                {% if u.role == 'admin' %}
+                <span class="badge badge-blue">admin</span>
+                {% else %}
+                <span class="badge badge-gray">{{ u.role }}</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if u.is_active %}
+                <span class="badge badge-green">active</span>
+                {% else %}
+                <span class="badge badge-red">inactive</span>
+                {% endif %}
+            </td>
+            <td class="text-dim text-sm">{{ u.zone_count }}</td>
+            <td>
+                <div class="btn-group">
+                    <a href="/users/{{ u.id }}" class="btn btn-sm">Edit</a>
+                    {% if u.id != user.id %}
+                    <button class="btn btn-danger btn-sm" x-data
+                        @click="if(confirm('Delete user {{ u.username }}?')) {
+                            fetch('/api/users/{{ u.id }}', {method:'DELETE'})
+                                .then(r => { if(r.ok) location.reload(); else r.json().then(d => alert(d.detail||'Error')); });
+                        }">Delete</button>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">No users found.</div>
+    {% endif %}
+</div>
+
+<!-- Create User Modal -->
+<div id="create-user-modal" class="modal-overlay" style="display:none"
+    x-data="{ username: '', password: '', role: 'operator', loading: false, error: '' }">
+    <div class="modal">
+        <div class="modal-header">
+            <span>Create User</span>
+            <button class="btn btn-sm" onclick="this.closest('.modal-overlay').style.display='none'">&times;</button>
+        </div>
+        <form @submit.prevent="
+            loading = true; error = '';
+            fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, password, role}) })
+                .then(r => r.ok ? location.reload() : r.json().then(d => { error = d.detail || 'Failed'; loading = false; }))
+                .catch(() => { error = 'Connection error'; loading = false; });
+        ">
+            <div class="modal-body">
+                <template x-if="error"><div class="flash flash-error" x-text="error"></div></template>
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" x-model="username" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" x-model="password" required autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select x-model="role">
+                        <option value="operator">Operator</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="this.closest('.modal-overlay').style.display='none'">Cancel</button>
+                <button type="submit" class="btn btn-primary" :disabled="loading">
+                    <span x-show="!loading">Create</span>
+                    <span x-show="loading">Creating...</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

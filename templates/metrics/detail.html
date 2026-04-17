@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Metrics: {{ server.name }} - PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Metrics: {{ server.name }}</h1>
+    </div>
+    <div class="btn-group">
+        <a href="/metrics" class="btn">&larr; All Servers</a>
+        <button class="btn" x-data @click="$dispatch('refresh')">Refresh</button>
+    </div>
+</div>
+
+<div x-data="metricsDetail()" x-init="connect()" @refresh="refresh()">
+
+    <template x-if="error">
+        <div class="flash flash-error" x-text="error"></div>
+    </template>
+
+    <template x-if="!data && !error">
+        <div class="card">
+            <div class="card-body empty-state">Loading metrics...</div>
+        </div>
+    </template>
+
+    <template x-if="data">
+    <div>
+        <!-- Server Info -->
+        <div class="card mb-2">
+            <div class="card-header">Server Info</div>
+            <div class="card-body">
+                <div class="grid-4">
+                    <div><span class="text-dim text-sm">Version</span><div x-text="data.server_info.version || '-'"></div></div>
+                    <div><span class="text-dim text-sm">Server ID</span><div x-text="data.server_info.id || '-'"></div></div>
+                    <div><span class="text-dim text-sm">Daemon Type</span><div x-text="data.server_info.daemon_type || '-'"></div></div>
+                    <div><span class="text-dim text-sm">URL</span><div class="mono text-sm" x-text="data.server_info.url || '-'"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Stats -->
+        <div class="grid-4 mb-2">
+            <div class="card">
+                <div class="card-body" style="text-align:center; padding:1.5rem;">
+                    <div style="font-size:2rem; font-weight:700; color:var(--primary);" x-text="stat('udp-queries')"></div>
+                    <div class="text-dim text-sm mt-1">UDP Queries</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body" style="text-align:center; padding:1.5rem;">
+                    <div style="font-size:2rem; font-weight:700; color:var(--success);" x-text="stat('tcp-queries')"></div>
+                    <div class="text-dim text-sm mt-1">TCP Queries</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body" style="text-align:center; padding:1.5rem;">
+                    <div style="font-size:2rem; font-weight:700; color:var(--warning);" x-text="stat('packetcache-hit')"></div>
+                    <div class="text-dim text-sm mt-1">Cache Hits</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body" style="text-align:center; padding:1.5rem;">
+                    <div style="font-size:2rem; font-weight:700; color:var(--text-dim);" x-text="stat('uptime')"></div>
+                    <div class="text-dim text-sm mt-1">Uptime (s)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Statistics -->
+        <div class="card">
+            <div class="card-header">
+                <span>All Statistics</span>
+                <input type="text" x-model="statsSearch" placeholder="Filter..." style="width:200px; padding:0.3rem 0.6rem; font-size:0.875rem;">
+            </div>
+            <table>
+                <thead><tr><th>Name</th><th>Value</th></tr></thead>
+                <tbody>
+                    <template x-for="s in filteredStats()" :key="s.name">
+                    <tr>
+                        <td class="mono text-sm" x-text="s.name"></td>
+                        <td class="mono text-sm" x-text="s.value"></td>
+                    </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    </template>
+</div>
+
+<script>
+function metricsDetail() {
+    const serverId = {{ server.id }};
+    let ws = null;
+
+    return {
+        data: null,
+        error: null,
+        statsSearch: '',
+
+        connect() {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${location.host}/api/metrics/ws/${serverId}`);
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                if (d.error) { this.error = d.error; }
+                else { this.data = d; this.error = null; }
+            };
+            ws.onerror = () => { this.error = 'WebSocket error. Falling back to HTTP.'; this.refresh(); };
+            ws.onclose = () => {};
+        },
+
+        async refresh() {
+            try {
+                const r = await fetch(`/api/metrics/${serverId}`);
+                if (r.ok) { this.data = await r.json(); this.error = null; }
+                else { const d = await r.json(); this.error = d.detail || 'Failed to load'; }
+            } catch (e) { this.error = 'Connection error'; }
+        },
+
+        stat(name) {
+            if (!this.data || !this.data.statistics) return '-';
+            const s = this.data.statistics.find(s => s.name === name);
+            return s ? s.value : '-';
+        },
+
+        filteredStats() {
+            if (!this.data || !this.data.statistics) return [];
+            if (!this.statsSearch) return this.data.statistics;
+            const q = this.statsSearch.toLowerCase();
+            return this.data.statistics.filter(s => s.name.toLowerCase().includes(q));
+        }
+    };
+}
+</script>
+{% endblock %}

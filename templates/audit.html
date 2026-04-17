@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Audit Log - PowerAdmin{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Audit Log</h1>
+</div>
+
+<div class="card" x-data="auditLog()" x-init="load()">
+    <div class="card-header">
+        <div class="flex gap-2 items-center">
+            <span x-text="'Total: ' + total"></span>
+            <input type="text" x-model="zoneFilter" placeholder="Filter by zone..." style="width: 200px; padding: 0.3rem 0.6rem; font-size: 0.8rem;" @input.debounce.300ms="load()">
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr><th>Time</th><th>User</th><th>Action</th><th>Zone</th><th>Detail</th></tr>
+        </thead>
+        <tbody>
+            <template x-for="e in entries" :key="e.id">
+            <tr>
+                <td class="text-sm text-dim" x-text="e.created_at"></td>
+                <td x-text="e.username || 'system'"></td>
+                <td><span class="badge badge-blue" x-text="e.action"></span></td>
+                <td class="mono text-sm" x-text="e.zone_name || '-'"></td>
+                <td class="text-sm text-dim" x-text="e.detail ? e.detail.substring(0,80) : '-'" style="max-width:300px; overflow:hidden; text-overflow:ellipsis;"></td>
+            </tr>
+            </template>
+        </tbody>
+    </table>
+    <div style="padding: 1rem; display:flex; justify-content:center; gap:0.5rem;">
+        <button class="btn btn-sm" @click="prevPage()" :disabled="offset === 0">&larr; Previous</button>
+        <span class="text-dim text-sm" style="padding:0.3rem;" x-text="'Page ' + (Math.floor(offset/limit)+1)"></span>
+        <button class="btn btn-sm" @click="nextPage()" :disabled="offset + limit >= total">Next &rarr;</button>
+    </div>
+</div>
+
+<script>
+function auditLog() {
+    return {
+        entries: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+        zoneFilter: '',
+
+        async load() {
+            let url = `/api/audit?limit=${this.limit}&offset=${this.offset}`;
+            if (this.zoneFilter) url += `&zone_name=${encodeURIComponent(this.zoneFilter)}`;
+            const r = await fetch(url);
+            const d = await r.json();
+            this.entries = d.entries;
+            this.total = d.total;
+        },
+        prevPage() { this.offset = Math.max(0, this.offset - this.limit); this.load(); },
+        nextPage() { this.offset += this.limit; this.load(); }
+    };
+}
+</script>
+{% endblock %}
