@@ -13,6 +13,17 @@ A web-based admin UI for [PowerDNS](https://www.powerdns.com/) built with Rust (
 - Audit log
 - Real-time metrics via WebSocket
 - Auto-notify slave servers on record changes for Master zones
+- Reverse zone management (IPv4 `in-addr.arpa` and IPv6 `ip6.arpa`) with automatic network ↔ ARPA name conversion
+
+## Reverse zones
+
+Reverse zones (`*.in-addr.arpa` for IPv4, `*.ip6.arpa` for IPv6) are managed on a dedicated **Reverse Zones** page, separate from forward zones.
+
+Features:
+- Auto-detect reverse zones imported from PowerDNS by their ARPA name
+- Display the human-readable network (e.g. `192.168.1.0/24`) derived from the ARPA zone name
+- Record editor pre-filtered to PTR-relevant types (PTR, NS, SOA, CNAME, TXT, NSEC, NSEC3, RRSIG, DNSKEY, …)
+- Helper tool: enter an IP address or CIDR prefix and get the correct ARPA zone name / PTR record name
 
 ## Stack
 
