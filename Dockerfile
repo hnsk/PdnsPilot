@@ -25,7 +25,7 @@ COPY static ./static
 
 RUN mkdir -p /data
 
-ENV POWERADMIN_DATABASE_PATH=/data/poweradmin.db
+ENV PDNSPILOT_DATABASE_PATH=/data/pdnspilot.db
 ENV BIND_ADDR=0.0.0.0:8080
 
 EXPOSE 8080

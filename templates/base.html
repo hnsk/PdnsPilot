@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}PowerAdmin{% endblock %}</title>
+    <title>{% block title %}PdnsPilot{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <script defer src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"></script>
     <style>
@@ -170,7 +170,7 @@
     <div class="navbar">
         <div class="brand">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            PowerAdmin
+            PdnsPilot
         </div>
         <nav>
             {% if user.role == 'admin' %}<a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>{% endif %}
