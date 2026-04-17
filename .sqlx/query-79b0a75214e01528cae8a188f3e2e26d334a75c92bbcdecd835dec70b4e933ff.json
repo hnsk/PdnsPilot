@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE zone_templates SET name=?, nameservers=?, soa_mname=?, soa_rname=?, soa_refresh=?, soa_retry=?, soa_expire=?, soa_ttl=?, is_default=? WHERE id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "79b0a75214e01528cae8a188f3e2e26d334a75c92bbcdecd835dec70b4e933ff"
+}

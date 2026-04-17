@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM zone_templates WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "9fb719d7abb4bbe5233b421d74f2e6a2a52e0a45f956494f591b115d1c817ea1"
+}

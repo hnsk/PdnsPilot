@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT zone_name FROM zone_assignments WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "zone_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "68f3a21a303fd3223873b56c328c23da96bd99e49165120107b817370bbdffae"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO pdns_servers (name, api_url, api_key, server_id) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "d3e7efede2c3661c525bb62b535155d6ce0be271c681e17236f398d9c36dcb9b"
+}

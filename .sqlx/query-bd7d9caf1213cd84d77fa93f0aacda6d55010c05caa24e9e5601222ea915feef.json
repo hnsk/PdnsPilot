@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT zone_name FROM zone_server_map ORDER BY zone_name",
+  "describe": {
+    "columns": [
+      {
+        "name": "zone_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bd7d9caf1213cd84d77fa93f0aacda6d55010c05caa24e9e5601222ea915feef"
+}

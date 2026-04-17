@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, api_url, api_key, server_id, is_active, created_at, updated_at FROM pdns_servers WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_key",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_active",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f446a8ca43cfa3be2695cc0ea079258847f8b1f019afc4ff4305e27c609b2617"
+}

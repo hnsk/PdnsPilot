@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO zone_server_map (zone_name, pdns_server_id) VALUES (?, ?) ON CONFLICT(zone_name, pdns_server_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "2056f51a9cd41922c87f76dee83f2d2e2fb8ce0560c91f12091d8770feedaf90"
+}

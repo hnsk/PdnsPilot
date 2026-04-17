@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT zone_name, pdns_server_id FROM zone_assignments WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "zone_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "pdns_server_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "a6ca8219f4101f2c72b0e2a5f541e903d836559e64290b442f811e65c3884573"
+}

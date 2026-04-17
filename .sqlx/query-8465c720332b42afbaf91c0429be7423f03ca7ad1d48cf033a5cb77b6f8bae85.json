@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT s.id, s.name, s.api_url, s.api_key, s.server_id, s.is_active, s.created_at, s.updated_at FROM pdns_servers s JOIN zone_server_map m ON s.id = m.pdns_server_id WHERE m.zone_name = ? AND s.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_url",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "api_key",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "server_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_active",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8465c720332b42afbaf91c0429be7423f03ca7ad1d48cf033a5cb77b6f8bae85"
+}

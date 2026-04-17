@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM zone_assignments WHERE zone_name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c976418f808a09d13ced0bab378caa1c7d8b634a03ef2e28dc23aaa114e1baac"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO zone_assignments (user_id, zone_name, pdns_server_id) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "6f7ffd14a8d1477f0404e8268b94ccf5a5458a668fca1d0dcfb13bb18d7e11a4"
+}

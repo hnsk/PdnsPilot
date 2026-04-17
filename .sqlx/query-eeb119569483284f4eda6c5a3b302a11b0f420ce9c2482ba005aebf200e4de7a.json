@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, name, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl, is_default, created_at FROM zone_templates ORDER BY is_default DESC, name ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "nameservers",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "soa_mname",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "soa_rname",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "soa_refresh",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "soa_retry",
+        "ordinal": 6,
+        "type_info": "Int64"
+      },
+      {
+        "name": "soa_expire",
+        "ordinal": 7,
+        "type_info": "Int64"
+      },
+      {
+        "name": "soa_ttl",
+        "ordinal": 8,
+        "type_info": "Int64"
+      },
+      {
+        "name": "is_default",
+        "ordinal": 9,
+        "type_info": "Int64"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "eeb119569483284f4eda6c5a3b302a11b0f420ce9c2482ba005aebf200e4de7a"
+}

@@ -6,9 +6,6 @@ Cargo.lock
 .env
 .env.*
 
-# SQLx prepared queries
-.sqlx/
-
 # Claude
 .claude/
 

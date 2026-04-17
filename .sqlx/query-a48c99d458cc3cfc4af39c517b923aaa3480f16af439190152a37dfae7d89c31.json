@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT zone_name FROM zone_server_map WHERE pdns_server_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "zone_name",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a48c99d458cc3cfc4af39c517b923aaa3480f16af439190152a37dfae7d89c31"
+}

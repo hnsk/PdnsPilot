@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: i64\", user_id, username, action, zone_name, detail, created_at FROM audit_log WHERE zone_name = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: i64",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "username",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "action",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "zone_name",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "detail",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "5ca66765a3ea797eeed9a63a6cfa8bacd7db3c3ecc7b949d988084700433c6d5"
+}

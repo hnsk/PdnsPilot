@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE zone_templates SET is_default = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "782ab7ae377ff9703997d0d83e9fca54bd6352f3f45b8688079e6db2a71d32ff"
+}

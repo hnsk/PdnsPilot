@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM zone_server_map WHERE zone_name = ? AND pdns_server_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6565298ccabee8bb63c034a66d039186ec8ce54af2cfe220f06b94e1f463cb78"
+}
