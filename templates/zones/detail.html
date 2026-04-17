@@ -21,11 +21,22 @@
                 .then(r => r.ok ? showToast('Zone rectified') : r.json().then(d => showToast(d.detail||'Error','error')))">
             Rectify
         </button>
+        {% endif %}
+        {% if user.role == 'admin' or zone.kind == 'Master' %}
         <button class="btn" x-data
             @click="fetch('/api/zones/{{ zone.name }}/notify?server_id={{ server_id }}', {method:'PUT'})
                 .then(r => r.ok ? showToast('Notify sent') : r.json().then(d => showToast(d.detail||'Error','error')))">
             Notify
         </button>
+        {% endif %}
+        {% if user.role == 'admin' or zone.kind == 'Slave' %}
+        {% if zone.kind == 'Slave' %}
+        <button class="btn" x-data
+            @click="fetch('/api/zones/{{ zone.name }}/axfr-retrieve?server_id={{ server_id }}', {method:'PUT'})
+                .then(r => r.ok ? showToast('Zone retrieval triggered') : r.json().then(d => showToast(d.detail||'Error','error')))">
+            Retrieve Zone
+        </button>
+        {% endif %}
         {% endif %}
     </div>
 </div>
@@ -35,7 +46,7 @@
 <!-- Tabs -->
 <div class="tabs">
     <button class="tab" :class="{active: tab==='records'}" @click="tab='records'">Records</button>
-    {% if user.role == 'admin' %}
+    {% if user.role == 'admin' or zone.kind == 'Slave' %}
     <button class="tab" :class="{active: tab==='settings'}" @click="tab='settings'">Settings</button>
     {% endif %}
 </div>
@@ -53,28 +64,12 @@
                     <option value="{{ rt }}">{{ rt }}</option>
                     {% endfor %}
                 </select>
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.875rem; user-select:none;">
+                    <input type="checkbox" x-model="showDnssec" style="cursor:pointer;">
+                    Show DNSSEC types
+                </label>
             </div>
             <button class="btn btn-primary btn-sm" @click="openAddRecord()">+ Add Record</button>
-        </div>
-
-        <!-- Bulk action toolbar -->
-        <div x-show="selected.length > 0" x-cloak
-             style="padding:0.5rem 1rem; background:var(--bg-hover,#1e293b); border-bottom:1px solid var(--border,#334155); display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-            <span class="text-sm text-dim" x-text="selected.length + ' selected'"></span>
-            <button class="btn btn-danger btn-sm" @click="bulkDelete()">Delete</button>
-            <button class="btn btn-sm" @click="bulkSetDisabled(true)">Disable</button>
-            <button class="btn btn-sm" @click="bulkSetDisabled(false)">Enable</button>
-            <template x-if="selectedTypes.length === 1">
-                <div class="flex gap-2 items-center" style="margin-left:0.5rem;">
-                    <input type="text" x-model="bulkContent" placeholder="Replace content..." style="padding:0.25rem 0.5rem; font-size:0.8rem; width:220px;">
-                    <button class="btn btn-sm btn-primary" @click="bulkReplaceContent()">Replace</button>
-                    <span x-show="bulkContentError" class="text-sm" style="color:var(--danger,#ef4444);" x-text="bulkContentError"></span>
-                </div>
-            </template>
-            <template x-if="selectedTypes.length > 1">
-                <span class="text-dim text-sm" style="margin-left:0.5rem;">Select same type to replace content</span>
-            </template>
-            <button class="btn btn-sm" style="margin-left:auto;" @click="clearSelection()">Clear</button>
         </div>
 
         <table>
@@ -127,11 +122,46 @@
                 </tr>
             </tbody>
         </table>
+
+        <!-- Bulk action bar -->
+        <div x-show="selected.length > 0" x-cloak
+             style="border-top:1px solid var(--border); padding:0.75rem 1.25rem; background:var(--bg-card); border-radius:0 0 8px 8px; display:flex; align-items:center; gap:0; flex-wrap:wrap;">
+            <!-- Selection count -->
+            <span class="text-sm" style="font-weight:600; min-width:6rem;" x-text="selected.length + ' selected'"></span>
+            <!-- Divider -->
+            <span style="width:1px; height:1.5rem; background:var(--border); margin:0 0.75rem;"></span>
+            <!-- Danger actions -->
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button class="btn btn-danger btn-sm" @click="bulkDelete()">Delete</button>
+            </div>
+            <!-- Divider -->
+            <span style="width:1px; height:1.5rem; background:var(--border); margin:0 0.75rem;"></span>
+            <!-- State actions -->
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button class="btn btn-sm" @click="bulkSetDisabled(false)">Enable</button>
+                <button class="btn btn-sm" @click="bulkSetDisabled(true)">Disable</button>
+            </div>
+            <!-- Replace content (only when single type selected) -->
+            <template x-if="selectedTypes.length === 1">
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-left:0.75rem;">
+                    <span style="width:1px; height:1.5rem; background:var(--border); margin-right:0.75rem;"></span>
+                    <input type="text" x-model="bulkContent" placeholder="Replace content…"
+                           style="padding:0.3rem 0.6rem; font-size:0.8rem; width:240px; background:var(--bg); border:1px solid var(--border); border-radius:4px; color:var(--text);">
+                    <button class="btn btn-sm btn-primary" @click="bulkReplaceContent()">Replace</button>
+                    <span x-show="bulkContentError" class="text-sm" style="color:var(--danger,#ef4444);" x-text="bulkContentError"></span>
+                </div>
+            </template>
+            <template x-if="selectedTypes.length > 1">
+                <span class="text-dim text-sm" style="margin-left:1rem; font-style:italic;">Select same type to replace content</span>
+            </template>
+            <!-- Clear -->
+            <button class="btn btn-sm" style="margin-left:auto;" @click="clearSelection()">Clear</button>
+        </div>
     </div>
 </div>
 </template>
 
-{% if user.role == 'admin' %}
+{% if user.role == 'admin' or zone.kind == 'Slave' %}
 <!-- Settings Tab -->
 <template x-if="tab==='settings'">
 <div>
@@ -139,6 +169,7 @@
         <div class="card-header">Zone Settings</div>
         <div class="card-body">
             <div class="grid-2">
+                {% if user.role == 'admin' %}
                 <div class="form-group">
                     <label>Kind</label>
                     <select x-model="settings.kind">
@@ -159,6 +190,13 @@
                     <label>SOA Edit API</label>
                     <input type="text" x-model="settings.soa_edit_api" placeholder="DEFAULT">
                 </div>
+                {% endif %}
+                <template x-if="settings.kind === 'Slave'">
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>Masters <span class="text-dim text-sm">(one IP per line)</span></label>
+                    <textarea x-model="settings.mastersText" rows="3" style="font-family:monospace; font-size:0.875rem;" placeholder="192.0.2.1&#10;192.0.2.2"></textarea>
+                </div>
+                </template>
             </div>
             <button class="btn btn-primary" @click="saveSettings()">Save Settings</button>
         </div>
@@ -237,11 +275,13 @@ function zoneDetail() {
         tab: 'records',
         search: '',
         typeFilter: '',
+        showDnssec: false,
+        dnssecTypes: ['RRSIG', 'DNSKEY', 'NSEC', 'NSEC3', 'NSEC3PARAM', 'CDS', 'CDNSKEY'],
         rrsets: [],
         selected: [],  // array of "name/type/ri" keys for selected records
         sortCol: 'name',
         sortDir: 'asc',
-        settings: { kind: zoneData.kind || 'Native', account: zoneData.account || '', soa_edit: zoneData.soa_edit || '', soa_edit_api: zoneData.soa_edit_api || 'DEFAULT' },
+        settings: { kind: zoneData.kind || 'Native', account: zoneData.account || '', soa_edit: zoneData.soa_edit || '', soa_edit_api: zoneData.soa_edit_api || 'DEFAULT', mastersText: (zoneData.masters || []).join('\n') },
         editMode: false,
         form: { name: '', type: 'A', ttl: defaultTtl, content: '', disabled: false },
         saving: false,
@@ -305,7 +345,8 @@ function zoneDetail() {
                 const matchSearch = !this.search ||
                     rs.name.toLowerCase().includes(this.search.toLowerCase()) ||
                     rs.records.some(r => r.content.toLowerCase().includes(this.search.toLowerCase()));
-                return matchType && matchSearch;
+                const matchDnssec = this.showDnssec || !this.dnssecTypes.includes(rs.type);
+                return matchType && matchSearch && matchDnssec;
             });
             const col = this.sortCol;
             const dir = this.sortDir === 'asc' ? 1 : -1;
@@ -514,10 +555,21 @@ function zoneDetail() {
         },
 
         async saveSettings() {
+            const isAdmin = {{ (user.role == 'admin') | tojson }};
+            const payload = {};
+            if (isAdmin) {
+                payload.kind = this.settings.kind;
+                payload.account = this.settings.account;
+                payload.soa_edit = this.settings.soa_edit;
+                payload.soa_edit_api = this.settings.soa_edit_api;
+            }
+            if (this.settings.kind === 'Slave') {
+                payload.masters = this.settings.mastersText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+            }
             const r = await fetch(apiUrl(`/api/zones/${zoneName}`), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kind: this.settings.kind, account: this.settings.account, soa_edit: this.settings.soa_edit, soa_edit_api: this.settings.soa_edit_api })
+                body: JSON.stringify(payload)
             });
             if (r.ok) showToast('Settings saved');
             else r.json().then(d => showToast(d.detail || 'Error', 'error'));

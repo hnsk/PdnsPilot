@@ -46,7 +46,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database initialized at {}", config.database_path);
 
     // Seed defaults
-    settings_repo::seed_defaults(&db, &[("default_record_ttl", "60")]).await?;
+    settings_repo::seed_defaults(&db, &[
+        ("default_record_ttl", "60"),
+        ("auto_notify_on_master", "true"),
+    ]).await?;
 
     // Ensure admin user exists
     user_repo::ensure_admin_exists(&db, &config.default_admin_password).await?;

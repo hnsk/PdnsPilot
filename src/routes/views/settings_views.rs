@@ -52,12 +52,19 @@ async fn settings_page(State(state): State<AppState>, jar: CookieJar) -> Respons
         .and_then(|v| v.parse().ok())
         .unwrap_or(60);
 
+    let auto_notify_on_master: bool = settings_repo::get_setting(&state.db, "auto_notify_on_master")
+        .await
+        .unwrap_or_default()
+        .map(|v| v == "true")
+        .unwrap_or(true);
+
     let ctx = minijinja::context! {
         user => serde_json::to_value(&user).unwrap_or_default(),
         active_page => "settings",
         pdns_servers => pdns_servers,
         zone_templates => serde_json::to_value(&zone_templates).unwrap_or_default(),
         default_record_ttl => default_record_ttl,
+        auto_notify_on_master => auto_notify_on_master,
     };
 
     match state.templates.get_template("settings.html") {

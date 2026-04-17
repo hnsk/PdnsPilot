@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use crate::auth::{AdminUser, AuthUser};
 use crate::error::AppError;
 use crate::models::zone::{RRSet, ZoneCreate, ZoneUpdate};
-use crate::repositories::{audit_repo, pdns_server_repo, zone_assignment_repo, zone_template_repo};
+use crate::repositories::{audit_repo, pdns_server_repo, settings_repo, zone_assignment_repo, zone_template_repo};
 use crate::AppState;
 
 const QUOTED_TYPES: &[&str] = &["TXT", "SPF"];
@@ -523,6 +523,31 @@ async fn patch_rrsets(
         )
         .await
         .ok();
+    }
+
+    // Auto-notify for Master zones after record changes (if setting enabled)
+    let auto_notify = settings_repo::get_setting(&state.db, "auto_notify_on_master")
+        .await
+        .unwrap_or_default()
+        .map(|v| v == "true")
+        .unwrap_or(true);
+    if auto_notify {
+        if let Ok(zone_info) = client.get_zone(&zone_id, false).await {
+            let kind = zone_info.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            if kind.to_lowercase() == "master" {
+                let _ = client.notify_zone(&zone_id).await;
+                audit_repo::log_action(
+                    &state.db,
+                    Some(user.id),
+                    Some(&user.username),
+                    "zone.notify",
+                    Some(&zone_id),
+                    Some("{\"auto\":true}"),
+                )
+                .await
+                .ok();
+            }
+        }
     }
 
     Ok(Json(json!({"ok": true})))

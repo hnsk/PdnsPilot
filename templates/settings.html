@@ -23,6 +23,10 @@
                     <input type="number" x-model.number="defaultTTL" min="1">
                     <p style="margin:.4rem 0 0; font-size:.8rem; color:var(--text-dim);">Applied when creating new records. Users can override this in their profile.</p>
                 </div>
+                <div class="form-group" style="display:flex; align-items:center; gap:.5rem; margin-top:1rem;">
+                    <input type="checkbox" id="auto-notify-master" x-model="autoNotifyOnMaster">
+                    <label for="auto-notify-master" style="margin:0;">Auto-notify slaves when zone kind changes to Master</label>
+                </div>
                 <button class="btn btn-primary mt-2" @click="save()" :disabled="saving">
                     <span x-show="!saving">Save</span>
                     <span x-show="saving">Saving…</span>
@@ -211,6 +215,7 @@
 function generalSettings() {
     return {
         defaultTTL: {{ default_record_ttl }},
+        autoNotifyOnMaster: {{ auto_notify_on_master | tojson }},
         saving: false,
 
         init() {},
@@ -222,16 +227,23 @@ function generalSettings() {
         async save() {
             this.saving = true;
             document.getElementById('general-flash').innerHTML = '';
-            const resp = await fetch('/api/settings/default-record-ttl', {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ value: this.defaultTTL }),
-            });
+            const [r1, r2] = await Promise.all([
+                fetch('/api/settings/default-record-ttl', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ value: this.defaultTTL }),
+                }),
+                fetch('/api/settings/auto-notify-on-master', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ value: this.autoNotifyOnMaster }),
+                }),
+            ]);
             this.saving = false;
-            if (resp.ok) {
+            if (r1.ok && r2.ok) {
                 this.flash('Saved.', 'success');
             } else {
-                const err = await resp.json().catch(() => ({detail: 'Save failed'}));
+                const err = await (r1.ok ? r2 : r1).json().catch(() => ({detail: 'Save failed'}));
                 this.flash(err.detail, 'error');
             }
         },
