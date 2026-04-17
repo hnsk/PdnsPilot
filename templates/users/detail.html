@@ -37,6 +37,7 @@
     <div class="card">
         <div class="card-header">
             <span>Zone Assignments</span>
+            <span x-show="zonesDirty" style="font-size:0.75rem; color: var(--warning); font-weight:600;">&#9679; Unsaved changes</span>
             <button class="btn btn-sm btn-primary" @click="showAddZone=true">+ Add</button>
         </div>
         <div style="max-height: 400px; overflow-y: auto;">
@@ -61,7 +62,7 @@
             </table>
         </div>
         <div class="card-body" style="border-top: 1px solid var(--border);">
-            <button class="btn btn-primary btn-sm" @click="saveZones()">Save Zone Assignments</button>
+            <button class="btn btn-sm" :class="zonesDirty ? 'btn-warning' : 'btn-primary'" @click="saveZones()">Save Zone Assignments</button>
         </div>
     </div>
 </div>
@@ -118,6 +119,7 @@ function userDetail() {
         isActive: {{ target_user.is_active | tojson }},
         password: '',
         assignedZones: JSON.parse(JSON.stringify(INITIAL_ZONES)),
+        zonesDirty: false,
 
         async saveUser() {
             const body = { role: this.role, is_active: this.isActive };
@@ -133,6 +135,7 @@ function userDetail() {
 
         removeZone(i) {
             this.assignedZones.splice(i, 1);
+            this.zonesDirty = true;
         },
 
         async saveZones() {
@@ -145,7 +148,7 @@ function userDetail() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            if (r.ok) showToast('Zones saved');
+            if (r.ok) { showToast('Zones saved'); this.zonesDirty = false; }
             else r.json().then(d => showToast(d.detail || 'Error', 'error'));
         }
     };
@@ -171,6 +174,7 @@ function addZoneModal() {
                 const srvId = parseInt(this.selectedServer);
                 const srvName = (SERVERS_WITH_ZONES.find(s => s.id == srvId) || {}).name || 'Unknown';
                 data.assignedZones.push({ zone_name: this.selectedZone, pdns_server_id: srvId, server_name: srvName });
+                data.zonesDirty = true;
             }
             document.getElementById('add-zone-modal').style.display = 'none';
             this.selectedServer = ''; this.selectedZone = '';

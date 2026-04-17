@@ -149,14 +149,25 @@ pub async fn create_template(
     let row = sqlx::query!(
         "INSERT INTO zone_templates \
          (name, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl, is_default) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) \
+         RETURNING id, name, nameservers, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl, is_default, created_at",
         name, ns_json, soa_mname, soa_rname, soa_refresh, soa_retry, soa_expire, soa_ttl, def_val
     )
     .fetch_one(db)
     .await?;
-    get_template(db, row.id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Template not found after insert"))
+    Ok(parse_template(
+        row.id,
+        row.name,
+        row.nameservers,
+        row.soa_mname,
+        row.soa_rname,
+        row.soa_refresh,
+        row.soa_retry,
+        row.soa_expire,
+        row.soa_ttl,
+        row.is_default,
+        row.created_at,
+    ))
 }
 
 pub async fn update_template(

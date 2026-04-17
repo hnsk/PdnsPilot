@@ -1,67 +1,141 @@
 {% extends "base.html" %}
 {% block title %}Metrics: {{ server.name }} - PowerAdmin{% endblock %}
 {% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+.live-badge { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; }
+.updated-at { font-size: 0.8rem; color: var(--text-dim); }
+.stat-val { font-size: 2rem; font-weight: 700; }
+.stat-lbl { font-size: 0.8rem; color: var(--text-dim); margin-top: 0.25rem; }
+.chart-wrap { position: relative; height: 110px; }
+.sub-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.sub-stat { text-align: center; }
+.sub-stat + .sub-stat { border-left: 1px solid var(--border); }
+.sub-stat-val { font-size: 1rem; font-weight: 600; font-family: var(--mono); }
+.sub-stat-lbl { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.15rem; }
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+</style>
+
 <div class="page-header">
-    <div>
-        <h1>Metrics: {{ server.name }}</h1>
+    <div style="display:flex; align-items:center; gap:0.75rem;">
+        <div>
+            <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.25rem;"><a href="/metrics">Metrics</a> / {{ server.name }}</div>
+            <h1>{{ server.name }}</h1>
+        </div>
     </div>
-    <div class="btn-group">
+    <div style="display:flex; align-items:center; gap:1rem;">
+        <span class="updated-at" x-data x-text="$store.mx.updatedAt"></span>
+        <span class="live-badge" x-data x-show="$store.mx.live">LIVE</span>
         <a href="/metrics" class="btn">&larr; All Servers</a>
-        <button class="btn" x-data @click="$dispatch('refresh')">Refresh</button>
     </div>
 </div>
 
-<div x-data="metricsDetail()" x-init="connect()" @refresh="refresh()">
+<div x-data="{ search: '' }" x-init="$store.mx.connect({{ server.id }})">
 
-    <template x-if="error">
-        <div class="flash flash-error" x-text="error"></div>
+    <template x-if="$store.mx.error">
+        <div class="flash flash-error" x-text="$store.mx.error"></div>
     </template>
 
-    <template x-if="!data && !error">
-        <div class="card">
-            <div class="card-body empty-state">Loading metrics...</div>
-        </div>
+    <template x-if="!$store.mx.data && !$store.mx.error">
+        <div class="card"><div class="card-body empty-state">Connecting via WebSocket...</div></div>
     </template>
 
-    <template x-if="data">
+    <template x-if="$store.mx.data">
     <div>
-        <!-- Server Info -->
-        <div class="card mb-2">
-            <div class="card-header">Server Info</div>
-            <div class="card-body">
-                <div class="grid-4">
-                    <div><span class="text-dim text-sm">Version</span><div x-text="data.server_info.version || '-'"></div></div>
-                    <div><span class="text-dim text-sm">Server ID</span><div x-text="data.server_info.id || '-'"></div></div>
-                    <div><span class="text-dim text-sm">Daemon Type</span><div x-text="data.server_info.daemon_type || '-'"></div></div>
-                    <div><span class="text-dim text-sm">URL</span><div class="mono text-sm" x-text="data.server_info.url || '-'"></div></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Key Stats -->
+        <!-- Top stat cards -->
         <div class="grid-4 mb-2">
             <div class="card">
-                <div class="card-body" style="text-align:center; padding:1.5rem;">
-                    <div style="font-size:2rem; font-weight:700; color:var(--primary);" x-text="stat('udp-queries')"></div>
-                    <div class="text-dim text-sm mt-1">UDP Queries</div>
+                <div class="card-body" style="text-align:center; padding:1.25rem;">
+                    <div class="stat-val" style="color:var(--primary);" x-text="$store.mx.sval('version', true)"></div>
+                    <div class="stat-lbl">Version</div>
                 </div>
             </div>
             <div class="card">
-                <div class="card-body" style="text-align:center; padding:1.5rem;">
-                    <div style="font-size:2rem; font-weight:700; color:var(--success);" x-text="stat('tcp-queries')"></div>
-                    <div class="text-dim text-sm mt-1">TCP Queries</div>
+                <div class="card-body" style="text-align:center; padding:1.25rem;">
+                    <div class="stat-val" style="color:var(--success);" x-text="$store.mx.uptime()"></div>
+                    <div class="stat-lbl">Uptime</div>
                 </div>
             </div>
             <div class="card">
-                <div class="card-body" style="text-align:center; padding:1.5rem;">
-                    <div style="font-size:2rem; font-weight:700; color:var(--warning);" x-text="stat('packetcache-hit')"></div>
-                    <div class="text-dim text-sm mt-1">Cache Hits</div>
+                <div class="card-body" style="text-align:center; padding:1.25rem;">
+                    <div class="stat-val" style="color:var(--warning);" x-text="$store.mx.latency()"></div>
+                    <div class="stat-lbl">Latency</div>
                 </div>
             </div>
             <div class="card">
-                <div class="card-body" style="text-align:center; padding:1.5rem;">
-                    <div style="font-size:2rem; font-weight:700; color:var(--text-dim);" x-text="stat('uptime')"></div>
-                    <div class="text-dim text-sm mt-1">Uptime (s)</div>
+                <div class="card-body" style="text-align:center; padding:1.25rem;">
+                    <div class="stat-val" style="color:var(--text-dim);" x-text="$store.mx.stat('backend-queries')"></div>
+                    <div class="stat-lbl">Backend Queries</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="charts-grid">
+            <!-- Queries -->
+            <div class="card">
+                <div class="card-header" style="padding:0.75rem 1rem; font-size:0.875rem;">Queries</div>
+                <div class="card-body" style="padding:0.75rem 1rem;">
+                    <div class="chart-wrap"><canvas id="chartQueries"></canvas></div>
+                    <div class="sub-stats">
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('udp-queries')"></div>
+                            <div class="sub-stat-lbl">UDP queries</div>
+                        </div>
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('tcp-queries')"></div>
+                            <div class="sub-stat-lbl">TCP queries</div>
+                        </div>
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('rd-queries') !== '-' ? $store.mx.stat('rd-queries') : '0'"></div>
+                            <div class="sub-stat-lbl">Recursing</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Query Cache -->
+            <div class="card">
+                <div class="card-header" style="padding:0.75rem 1rem; font-size:0.875rem;">Query Cache</div>
+                <div class="card-body" style="padding:0.75rem 1rem;">
+                    <div class="chart-wrap"><canvas id="chartCache"></canvas></div>
+                    <div class="sub-stats">
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('packetcache-hit')"></div>
+                            <div class="sub-stat-lbl">Hits</div>
+                        </div>
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('packetcache-miss')"></div>
+                            <div class="sub-stat-lbl">Misses</div>
+                        </div>
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.hitRatio() + '%'"></div>
+                            <div class="sub-stat-lbl">Hit ratio</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Errors -->
+            <div class="card">
+                <div class="card-header" style="padding:0.75rem 1rem; font-size:0.875rem;">Errors</div>
+                <div class="card-body" style="padding:0.75rem 1rem;">
+                    <div class="chart-wrap"><canvas id="chartErrors"></canvas></div>
+                    <div class="sub-stats">
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('servfail-packets')"></div>
+                            <div class="sub-stat-lbl">SERVFAIL packets</div>
+                        </div>
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('nxdomain-packets') !== '-' ? $store.mx.stat('nxdomain-packets') : '0'"></div>
+                            <div class="sub-stat-lbl">NXDOMAIN packets</div>
+                        </div>
+                        <div class="sub-stat">
+                            <div class="sub-stat-val" x-text="$store.mx.stat('corrupt-packets')"></div>
+                            <div class="sub-stat-lbl">Corrupt packets</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -70,15 +144,37 @@
         <div class="card">
             <div class="card-header">
                 <span>All Statistics</span>
-                <input type="text" x-model="statsSearch" placeholder="Filter..." style="width:200px; padding:0.3rem 0.6rem; font-size:0.875rem;">
+                <input type="text" x-model="search" placeholder="Filter..." style="width:200px; padding:0.3rem 0.6rem; font-size:0.875rem;">
             </div>
             <table>
-                <thead><tr><th>Name</th><th>Value</th></tr></thead>
+                <thead><tr>
+                    <th @click="$store.mx.toggleSort('name')" style="cursor:pointer; user-select:none; white-space:nowrap;">
+                        Name
+                        <span x-show="$store.mx.sortCol==='name'" x-text="$store.mx.sortAsc ? '▲' : '▼'" style="font-size:0.7rem; margin-left:0.25rem;"></span>
+                    </th>
+                    <th @click="$store.mx.toggleSort('value')" style="cursor:pointer; user-select:none; white-space:nowrap;">
+                        Value
+                        <span x-show="$store.mx.sortCol==='value'" x-text="$store.mx.sortAsc ? '▲' : '▼'" style="font-size:0.7rem; margin-left:0.25rem;"></span>
+                    </th>
+                    <th style="width:2.5rem;"></th>
+                </tr></thead>
                 <tbody>
-                    <template x-for="s in filteredStats()" :key="s.name">
+                    <template x-for="s in $store.mx.filteredStats(search)" :key="s.name">
                     <tr>
                         <td class="mono text-sm" x-text="s.name"></td>
-                        <td class="mono text-sm" x-text="s.value"></td>
+                        <td class="mono text-sm" x-text="$store.mx.statDisplay(s)"></td>
+                        <td>
+                            <button x-show="$store.mx.isNumeric(s)" @click="$store.mx.openMetric(s.name)"
+                                title="View graph" style="background:var(--bg-card); border:1px solid var(--border); cursor:pointer; color:var(--primary); padding:0.25rem 0.5rem; border-radius:4px; line-height:1; display:inline-flex; align-items:center; gap:0.3rem;"
+                                onmouseover="this.style.background='var(--primary)';this.style.color='#fff';this.style.borderColor='var(--primary)'" onmouseout="this.style.background='var(--bg-card)';this.style.color='var(--primary)';this.style.borderColor='var(--border)'">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            </button>
+                            <button x-show="$store.mx.isList(s)" @click="$store.mx.openListMetric(s.name)"
+                                title="View entries" style="background:var(--bg-card); border:1px solid var(--border); cursor:pointer; color:var(--primary); padding:0.25rem 0.5rem; border-radius:4px; line-height:1; display:inline-flex; align-items:center; gap:0.3rem;"
+                                onmouseover="this.style.background='var(--primary)';this.style.color='#fff';this.style.borderColor='var(--primary)'" onmouseout="this.style.background='var(--bg-card)';this.style.color='var(--primary)';this.style.borderColor='var(--border)'">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            </button>
+                        </td>
                     </tr>
                     </template>
                 </tbody>
@@ -86,51 +182,422 @@
         </div>
     </div>
     </template>
+
+    <!-- List metric overlay -->
+    <template x-if="$store.mx.listOverlay.open">
+        <div class="modal-overlay" @click.self="$store.mx.closeListMetric()" @keydown.escape.window="$store.mx.closeListMetric()" style="z-index:200;">
+            <div class="modal" style="max-width:560px; width:100%; display:flex; flex-direction:column; max-height:calc(90vh - 2rem);">
+                <div class="modal-header" style="flex-shrink:0;">
+                    <span class="mono" x-text="$store.mx.listOverlay.name"></span>
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <span style="font-size:0.8rem; color:var(--text-dim);" x-text="$store.mx.listOverlay.entries.length + ' entries'"></span>
+                        <button @click="$store.mx.closeListMetric()" class="btn btn-sm" style="padding:0.2rem 0.5rem;">✕</button>
+                    </div>
+                </div>
+                <div class="modal-body" style="padding:0; overflow-y:auto; flex:1 1 auto;">
+                    <table style="width:100%; border-collapse:collapse;">
+                        <thead style="position:sticky; top:0; background:var(--bg-card); z-index:1;">
+                            <tr>
+                                <th style="text-align:left; padding:0.5rem 1rem; font-size:0.75rem; color:var(--text-dim); border-bottom:1px solid var(--border);" x-text="$store.mx.listOverlay.hasNames ? 'Name' : '#'"></th>
+                                <th style="text-align:right; padding:0.5rem 1rem; font-size:0.75rem; color:var(--text-dim); border-bottom:1px solid var(--border);">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(entry, idx) in $store.mx.listOverlay.entries" :key="idx">
+                                <tr style="border-bottom:1px solid var(--border);">
+                                    <td class="mono text-sm" style="padding:0.4rem 1rem;" x-text="$store.mx.listOverlay.hasNames ? entry.name : idx + 1"></td>
+                                    <td class="mono text-sm" style="padding:0.4rem 1rem; text-align:right;" x-text="$store.mx.listOverlay.hasNames ? entry.value : entry"></td>
+                                </tr>
+                            </template>
+                            <template x-if="$store.mx.listOverlay.entries.length === 0">
+                                <tr><td colspan="2" style="padding:2rem; text-align:center; color:var(--text-dim);">No entries</td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Metric overlay -->
+    <template x-if="$store.mx.overlay.open">
+        <div class="modal-overlay" @click.self="$store.mx.closeMetric()" @keydown.escape.window="$store.mx.closeMetric()" style="z-index:200;">
+            <div class="modal" style="max-width:640px; width:100%;" x-init="$nextTick(() => $store.mx.initOverlayChart())">
+                <div class="modal-header">
+                    <span class="mono" x-text="$store.mx.overlay.name"></span>
+                    <button @click="$store.mx.closeMetric()" class="btn btn-sm" style="padding:0.2rem 0.5rem;">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div style="position:relative; height:200px; margin-bottom:1rem;">
+                        <canvas id="chartOverlay"></canvas>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="font-size:2.5rem; font-weight:700; color:var(--primary); font-family:var(--mono);" x-text="$store.mx.overlay.current"></div>
+                        <div style="font-size:0.8rem; color:var(--text-dim); margin-top:0.25rem;">per second</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>
 
 <script>
-function metricsDetail() {
-    const serverId = {{ server.id }};
-    let ws = null;
+(function() {
+    const HISTORY = 60;
+    const CHART_COLOR = { primary: '#3b82f6', success: '#22c55e', warning: '#f59e0b', danger: '#ef4444', dim: '#94a3b8' };
 
-    return {
-        data: null,
-        error: null,
-        statsSearch: '',
+    function makeLabels() { return Array(HISTORY).fill(''); }
 
-        connect() {
-            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${proto}//${location.host}/api/metrics/ws/${serverId}`);
-            ws.onmessage = (e) => {
-                const d = JSON.parse(e.data);
-                if (d.error) { this.error = d.error; }
-                else { this.data = d; this.error = null; }
-            };
-            ws.onerror = () => { this.error = 'WebSocket error. Falling back to HTTP.'; this.refresh(); };
-            ws.onclose = () => {};
-        },
+    function chartDefaults(datasets) {
+        return {
+            type: 'line',
+            data: { labels: makeLabels(), datasets },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: datasets.length > 1, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(51,65,85,0.6)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 4 }
+                    }
+                },
+                elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 1.5 } }
+            }
+        };
+    }
 
-        async refresh() {
-            try {
-                const r = await fetch(`/api/metrics/${serverId}`);
-                if (r.ok) { this.data = await r.json(); this.error = null; }
-                else { const d = await r.json(); this.error = d.detail || 'Failed to load'; }
-            } catch (e) { this.error = 'Connection error'; }
-        },
+    function makeDs(label, color, filled) {
+        return {
+            label,
+            data: Array(HISTORY).fill(0),
+            borderColor: color,
+            backgroundColor: filled ? color.replace(')', ', 0.1)').replace('rgb', 'rgba') : 'transparent',
+            fill: !!filled
+        };
+    }
 
-        stat(name) {
-            if (!this.data || !this.data.statistics) return '-';
-            const s = this.data.statistics.find(s => s.name === name);
-            return s ? s.value : '-';
-        },
+    let charts = {};
 
-        filteredStats() {
-            if (!this.data || !this.data.statistics) return [];
-            if (!this.statsSearch) return this.data.statistics;
-            const q = this.statsSearch.toLowerCase();
-            return this.data.statistics.filter(s => s.name.toLowerCase().includes(q));
-        }
-    };
-}
+    function initCharts() {
+        const cacheDs = makeDs('Hit %', CHART_COLOR.success, true);
+        cacheDs.data = Array(HISTORY).fill(0);
+
+        charts.queries = new Chart(document.getElementById('chartQueries'), chartDefaults([
+            makeDs('UDP/s', CHART_COLOR.primary, false),
+            makeDs('TCP/s', CHART_COLOR.success, false)
+        ]));
+        charts.cache = new Chart(document.getElementById('chartCache'), {
+            ...chartDefaults([cacheDs]),
+            options: {
+                ...chartDefaults([]).options,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { display: true, min: 0, max: 100, grid: { color: 'rgba(51,65,85,0.6)' }, ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 4, callback: v => v + '%' } }
+                },
+                elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 1.5 } }
+            }
+        });
+        charts.errors = new Chart(document.getElementById('chartErrors'), chartDefaults([
+            makeDs('SERVFAIL/s', CHART_COLOR.danger, false),
+            makeDs('NXDOMAIN/s', CHART_COLOR.warning, false)
+        ]));
+    }
+
+    function pushChart(chart, ...series) {
+        series.forEach((val, i) => {
+            chart.data.datasets[i].data.push(val);
+            chart.data.datasets[i].data.shift();
+        });
+        chart.data.labels.push('');
+        chart.data.labels.shift();
+        chart.update('none');
+    }
+
+    function numStat(stats, name) {
+        if (!stats) return null;
+        const s = stats.find(s => s.name === name);
+        if (!s || s.value === null || s.value === undefined) return null;
+        const n = Number(s.value);
+        return isNaN(n) ? null : n;
+    }
+
+    function fmtNum(n) {
+        if (n === null || n === undefined) return n;
+        const num = Number(n);
+        if (isNaN(num)) return n;
+        const abs = Math.abs(num);
+        if (abs >= 1e12) return (num / 1e12).toFixed(1).replace(/\.0$/, '') + 'T';
+        if (abs >= 1e9)  return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'G';
+        if (abs >= 1e6)  return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (abs >= 1e3)  return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+        return String(num);
+    }
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('mx', {
+            data: null,
+            error: null,
+            live: false,
+            updatedAt: '',
+            _prev: null,
+            _prevTime: null,
+            _chartsReady: false,
+            overlay: { open: false, name: '', history: Array(HISTORY).fill(null), current: '-' },
+            listOverlay: { open: false, name: '', entries: [], hasNames: false },
+            sortCol: 'name',
+            sortAsc: true,
+
+            connect(serverId) {
+                const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${proto}//${location.host}/api/metrics/ws/${serverId}`);
+                ws.onmessage = (e) => {
+                    const d = JSON.parse(e.data);
+                    if (d.error) { this.error = d.error; this.live = false; return; }
+                    this.data = d;
+                    this.error = null;
+                    this.live = true;
+                    const now = new Date();
+                    this.updatedAt = 'Updated ' + now.toLocaleTimeString();
+                    this._updateCharts(d);
+                };
+                ws.onerror = () => { this.error = 'WebSocket error'; this.live = false; };
+                ws.onclose = () => { this.live = false; };
+            },
+
+            _updateCharts(d) {
+                if (!this._chartsReady) {
+                    Alpine.nextTick(() => {
+                        if (document.getElementById('chartQueries')) {
+                            initCharts();
+                            this._chartsReady = true;
+                            this._applyChartUpdate(d);
+                        }
+                    });
+                } else {
+                    this._applyChartUpdate(d);
+                }
+            },
+
+            _applyChartUpdate(d) {
+                if (!this._chartsReady) return;
+                const stats = d.statistics;
+                const now = Date.now();
+                const dt = this._prevTime ? (now - this._prevTime) / 1000 : 1;
+                const prev = this._prev;
+
+                function rate(name) {
+                    if (!prev) return 0;
+                    const cur = numStat(stats, name);
+                    const old = numStat(prev, name);
+                    if (cur === null || old === null) return 0;
+                    return Math.max(0, (cur - old) / dt);
+                }
+
+                const udpRate = rate('udp-queries');
+                const tcpRate = rate('tcp-queries');
+                const servfailRate = rate('servfail-packets');
+                const nxdomainRate = rate('nxdomain-packets');
+
+                const hits = numStat(stats, 'packetcache-hit') || 0;
+                const misses = numStat(stats, 'packetcache-miss') || 0;
+                const total = hits + misses;
+                const hitPct = total > 0 ? (hits / total) * 100 : 0;
+
+                pushChart(charts.queries, udpRate, tcpRate);
+                pushChart(charts.cache, hitPct);
+                pushChart(charts.errors, servfailRate, nxdomainRate);
+
+                // Update overlay chart if open — show per-second delta
+                if (this.overlay.open && this.overlay.name) {
+                    let delta = null;
+                    if (prev) {
+                        const cur = numStat(stats, this.overlay.name);
+                        const old = numStat(prev, this.overlay.name);
+                        if (cur !== null && old !== null) {
+                            delta = Math.max(0, (cur - old) / dt);
+                        }
+                    }
+                    this.overlay.current = delta !== null ? fmtNum(parseFloat(delta.toFixed(1))) : '-';
+                    this.overlay.history.push(delta);
+                    this.overlay.history.shift();
+                    if (charts.overlay) {
+                        charts.overlay.data.datasets[0].data = [...this.overlay.history];
+                        charts.overlay.data.labels.push('');
+                        charts.overlay.data.labels.shift();
+                        charts.overlay.update('none');
+                    }
+                }
+
+                this._prev = stats;
+                this._prevTime = now;
+            },
+
+            stat(name) {
+                if (!this.data || !this.data.statistics) return '-';
+                const s = this.data.statistics.find(s => s.name === name);
+                if (!s || s.value === null || s.value === undefined) return '-';
+                const n = Number(s.value);
+                return isNaN(n) ? s.value : fmtNum(n);
+            },
+
+            sval(name, fromInfo) {
+                if (!this.data) return '-';
+                if (fromInfo && this.data.server_info) {
+                    const v = this.data.server_info[name];
+                    return v !== undefined && v !== null ? v : '-';
+                }
+                return this.stat(name);
+            },
+
+            uptime() {
+                const s = numStat(this.data && this.data.statistics, 'uptime');
+                if (s === null) return '-';
+                const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+                let r = '';
+                if (d) r += d + 'd ';
+                if (h || d) r += h + 'h ';
+                r += m + 'm';
+                return r.trim();
+            },
+
+            latency() {
+                const v = this.stat('latency');
+                return v !== '-' ? v + ' ms' : '-';
+            },
+
+            hitRatio() {
+                const hits = numStat(this.data && this.data.statistics, 'packetcache-hit') || 0;
+                const misses = numStat(this.data && this.data.statistics, 'packetcache-miss') || 0;
+                const total = hits + misses;
+                if (total === 0) return '0.0';
+                return ((hits / total) * 100).toFixed(1);
+            },
+
+            filteredStats(search) {
+                if (!this.data || !this.data.statistics) return [];
+                let list = this.data.statistics;
+                if (search) {
+                    const q = search.toLowerCase();
+                    list = list.filter(s => s.name.toLowerCase().includes(q));
+                }
+                const col = this.sortCol;
+                const asc = this.sortAsc;
+                return [...list].sort((a, b) => {
+                    let av, bv;
+                    if (col === 'name') {
+                        av = a.name; bv = b.name;
+                    } else {
+                        const an = Number(a.value), bn = Number(b.value);
+                        const aNum = !isNaN(an) && a.value !== null && typeof a.value !== 'object';
+                        const bNum = !isNaN(bn) && b.value !== null && typeof b.value !== 'object';
+                        if (aNum && bNum) { av = an; bv = bn; }
+                        else { av = String(a.value ?? ''); bv = String(b.value ?? ''); }
+                    }
+                    if (av < bv) return asc ? -1 : 1;
+                    if (av > bv) return asc ? 1 : -1;
+                    return 0;
+                });
+            },
+
+            toggleSort(col) {
+                if (this.sortCol === col) { this.sortAsc = !this.sortAsc; }
+                else { this.sortCol = col; this.sortAsc = col === 'name'; }
+            },
+
+            statDisplay(s) {
+                if (s.value === null || s.value === undefined) return '-';
+                if (typeof s.value === 'object') {
+                    if (Array.isArray(s.value)) return `[${s.value.length} entries]`;
+                    return JSON.stringify(s.value);
+                }
+                const n = Number(s.value);
+                return isNaN(n) ? s.value : fmtNum(n);
+            },
+
+            isNumeric(s) {
+                if (s.value === null || s.value === undefined) return false;
+                if (typeof s.value === 'object') return false;
+                return !isNaN(Number(s.value));
+            },
+
+            isList(s) {
+                if (s.value === null || s.value === undefined) return false;
+                return typeof s.value === 'object';
+            },
+
+            openListMetric(name) {
+                if (!this.data || !this.data.statistics) return;
+                const s = this.data.statistics.find(s => s.name === name);
+                if (!s || !s.value) return;
+                let entries = [];
+                let hasNames = false;
+                if (Array.isArray(s.value)) {
+                    entries = s.value;
+                    hasNames = entries.length > 0 && typeof entries[0] === 'object' && 'name' in entries[0];
+                } else if (typeof s.value === 'object') {
+                    entries = Object.entries(s.value).map(([k, v]) => ({ name: k, value: v }));
+                    hasNames = true;
+                }
+                this.listOverlay = { open: true, name, entries, hasNames };
+            },
+
+            closeListMetric() {
+                this.listOverlay.open = false;
+            },
+
+            openMetric(name) {
+                if (charts.overlay) { charts.overlay.destroy(); charts.overlay = null; }
+                this.overlay.name = name;
+                this.overlay.history = Array(HISTORY).fill(null);
+                this.overlay.current = '-';
+                this.overlay.open = true;
+            },
+
+            closeMetric() {
+                if (charts.overlay) { charts.overlay.destroy(); charts.overlay = null; }
+                this.overlay.open = false;
+            },
+
+            initOverlayChart() {
+                const canvas = document.getElementById('chartOverlay');
+                if (!canvas) return;
+                if (charts.overlay) { charts.overlay.destroy(); }
+                charts.overlay = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: makeLabels(),
+                        datasets: [{
+                            data: [...this.overlay.history],
+                            borderColor: CHART_COLOR.primary,
+                            backgroundColor: 'rgba(59,130,246,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            spanGaps: true
+                        }]
+                    },
+                    options: {
+                        animation: false,
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { display: false },
+                            y: { beginAtZero: false, grid: { color: 'rgba(51,65,85,0.6)' }, ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 5 } }
+                        },
+                        elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 1.5 } }
+                    }
+                });
+            }
+        });
+    });
+})();
 </script>
 {% endblock %}

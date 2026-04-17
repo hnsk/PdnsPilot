@@ -76,13 +76,19 @@
                 <div style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center; flex-wrap:wrap;">
                     <span class="text-dim text-sm" x-text="results.length + ' server(s)'"></span>
                     <template x-if="results.length >= 2">
-                        <button class="btn btn-sm" @click="compareMode = !compareMode" x-text="compareMode ? 'Hide Compare' : 'Compare'"></button>
+                        <button class="btn btn-sm" @click="compareMode = !compareMode; axfrDiffsOnly = false" x-text="compareMode ? 'Hide Compare' : 'Compare'"></button>
                     </template>
                     <button class="btn btn-sm" @click="plainTextMode = !plainTextMode" x-text="plainTextMode ? 'Hide Plain Text' : 'Plain Text'"></button>
                     <label style="display:flex; align-items:center; gap:0.3rem; font-size:0.85em; cursor:pointer;">
                         <input type="checkbox" x-model="axfr.ignoreDnssec" />
                         Ignore DNSSEC records
                     </label>
+                    <template x-if="compareMode">
+                        <label style="display:flex; align-items:center; gap:0.3rem; font-size:0.85em; cursor:pointer;">
+                            <input type="checkbox" x-model="axfrDiffsOnly" />
+                            Differences only
+                        </label>
+                    </template>
                 </div>
 
                 <!-- Compare view -->
@@ -104,16 +110,20 @@
                                     </template>
                                     <table>
                                         <thead><tr>
-                                            <th>Name</th><th>TTL</th><th>Type</th><th>RData</th><th>Servers</th>
+                                            <th style="border-right:2px solid var(--border); padding-right:1rem;">Found On <abbr title="Which server(s) returned this record — not part of zone data" style="cursor:help; font-style:normal; opacity:0.6; text-decoration:none;">ⓘ</abbr></th><th>Name</th><th>TTL</th><th>Type</th><th>RData</th>
                                         </tr></thead>
                                         <tbody>
-                                            <template x-for="row in axfrCompareRows()" :key="row.name + row.rtype + row.rdata">
+                                            <template x-for="row in axfrCompareRows().filter(r => !axfrDiffsOnly || r.missing || r.ttlMismatch)" :key="row.name + row.rtype + row.rdata">
                                                 <tr :style="row.missing ? 'color:var(--danger)' : (row.ttlMismatch ? 'color:var(--warning,#c8920a)' : '')">
+                                                    <td style="border-right:2px solid var(--border); padding-right:1rem; white-space:nowrap;">
+                                                        <template x-for="sname in row.presentOn" :key="sname">
+                                                            <span :style="`display:inline-block; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.75em; font-weight:600; margin-right:0.25rem; background:${serverColorFor(sname)}22; color:${serverColorFor(sname)}; border:1px solid ${serverColorFor(sname)}66`" x-text="sname"></span>
+                                                        </template>
+                                                    </td>
                                                     <td x-text="row.name"></td>
                                                     <td x-text="row.ttlDisplay" :title="row.ttlMismatch ? 'TTL differs between servers' : ''"></td>
-                                                    <td x-text="row.rtype"></td>
+                                                    <td><span class="badge badge-blue" :class="'rr-' + row.rtype" x-text="row.rtype"></span></td>
                                                     <td class="mono" x-text="row.rdata"></td>
-                                                    <td x-text="row.presentOn.join(', ')"></td>
                                                 </tr>
                                             </template>
                                         </tbody>
@@ -164,7 +174,7 @@
                                                             <tr>
                                                                 <td x-text="rec.name"></td>
                                                                 <td x-text="rec.ttl"></td>
-                                                                <td x-text="rec.rtype"></td>
+                                                                <td><span class="badge badge-blue" :class="'rr-' + rec.rtype" x-text="rec.rtype"></span></td>
                                                                 <td class="mono" x-text="rec.rdata"></td>
                                                             </tr>
                                                         </template>
@@ -252,12 +262,18 @@
         <!-- Lookup results -->
         <template x-if="results.length > 0">
             <div>
-                <div style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center;">
+                <div style="display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center; flex-wrap:wrap;">
                     <span class="text-dim text-sm" x-text="results.length + ' server(s)'"></span>
                     <template x-if="results.length >= 2">
-                        <button class="btn btn-sm" @click="compareMode = !compareMode" x-text="compareMode ? 'Hide Compare' : 'Compare'"></button>
+                        <button class="btn btn-sm" @click="compareMode = !compareMode; lookupDiffsOnly = false" x-text="compareMode ? 'Hide Compare' : 'Compare'"></button>
                     </template>
                     <button class="btn btn-sm" @click="plainTextMode = !plainTextMode" x-text="plainTextMode ? 'Hide Plain Text' : 'Plain Text'"></button>
+                    <template x-if="compareMode">
+                        <label style="display:flex; align-items:center; gap:0.3rem; font-size:0.85em; cursor:pointer;">
+                            <input type="checkbox" x-model="lookupDiffsOnly" />
+                            Differences only
+                        </label>
+                    </template>
                 </div>
 
                 <!-- Compare view -->
@@ -272,15 +288,19 @@
                                 <div class="flash flash-success">Results match across servers.</div>
                             </template>
                             <table>
-                                <thead><tr><th>Name</th><th>TTL</th><th>Type</th><th>RData</th><th>Servers</th></tr></thead>
+                                <thead><tr><th style="border-right:2px solid var(--border); padding-right:1rem;">Found On <abbr title="Which server(s) returned this record — not part of DNS response" style="cursor:help; font-style:normal; opacity:0.6; text-decoration:none;">ⓘ</abbr></th><th>Name</th><th>TTL</th><th>Type</th><th>RData</th></tr></thead>
                                 <tbody>
-                                    <template x-for="row in lookupCompareRows()" :key="row.rdata">
+                                    <template x-for="row in lookupCompareRows().filter(r => !lookupDiffsOnly || r.missing)" :key="row.rdata">
                                         <tr :style="row.missing ? 'color:var(--danger)' : ''">
+                                            <td style="border-right:2px solid var(--border); padding-right:1rem; white-space:nowrap;">
+                                                <template x-for="sname in row.servers" :key="sname">
+                                                    <span :style="`display:inline-block; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.75em; font-weight:600; margin-right:0.25rem; background:${serverColorFor(sname)}22; color:${serverColorFor(sname)}; border:1px solid ${serverColorFor(sname)}66`" x-text="sname"></span>
+                                                </template>
+                                            </td>
                                             <td x-text="row.name"></td>
                                             <td x-text="row.ttl"></td>
                                             <td x-text="row.rtype"></td>
                                             <td class="mono" x-text="row.rdata"></td>
-                                            <td x-text="row.servers.join(', ')"></td>
                                         </tr>
                                     </template>
                                 </tbody>
@@ -336,10 +356,17 @@ function toolsPage() {
         tab: 'axfr',
         loading: false,
         compareMode: false,
+        serverPalette: ['#3b82f6','#f59e0b','#22c55e','#a855f7','#06b6d4','#f97316'],
+        serverColorFor(name) {
+            const idx = this.results.findIndex(r => r.server_name === name);
+            return this.serverPalette[idx >= 0 ? idx % this.serverPalette.length : 0];
+        },
         plainTextMode: false,
         axfrCompareText: false,
+        axfrDiffsOnly: true,
+        lookupDiffsOnly: true,
         results: [],
-        axfr: { zone: '', serverIds: [], customHosts: [], ignoreDnssec: false },
+        axfr: { zone: '', serverIds: [], customHosts: [], ignoreDnssec: true },
         dnssecTypes: new Set(['RRSIG', 'DNSKEY', 'NSEC', 'NSEC3', 'NSEC3PARAM']),
         lookup: { name: '', rtype: 'A', serverIds: [], customHosts: [] },
         axfrSort: { col: null, dir: 1 },
@@ -356,6 +383,8 @@ function toolsPage() {
             this.compareMode = false;
             this.plainTextMode = false;
             this.axfrCompareText = false;
+            this.axfrDiffsOnly = true;
+            this.lookupDiffsOnly = true;
             this.axfrSort = { col: null, dir: 1 };
         },
 

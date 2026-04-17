@@ -25,7 +25,7 @@
                 </div>
                 <div class="form-group" style="display:flex; align-items:center; gap:.5rem; margin-top:1rem;">
                     <input type="checkbox" id="auto-notify-master" x-model="autoNotifyOnMaster">
-                    <label for="auto-notify-master" style="margin:0;">Auto-notify slaves when zone kind changes to Master</label>
+                    <label for="auto-notify-master" style="margin:0;">Auto-notify slaves on record modifications and creations for Master zones</label>
                 </div>
                 <button class="btn btn-primary mt-2" @click="save()" :disabled="saving">
                     <span x-show="!saving">Save</span>

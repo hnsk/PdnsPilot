@@ -1,26 +1,378 @@
 {% extends "base.html" %}
 {% block title %}Metrics - PowerAdmin{% endblock %}
 {% block content %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+.live-badge { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; }
+.updated-at { font-size: 0.8rem; color: var(--text-dim); }
+.stat-val { font-size: 2rem; font-weight: 700; }
+.stat-lbl { font-size: 0.8rem; color: var(--text-dim); margin-top: 0.25rem; }
+.chart-wrap { position: relative; height: 110px; }
+.sub-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.sub-stat { text-align: center; }
+.sub-stat + .sub-stat { border-left: 1px solid var(--border); }
+.sub-stat-val { font-size: 1rem; font-weight: 600; font-family: var(--mono); }
+.sub-stat-lbl { font-size: 0.7rem; color: var(--text-dim); margin-top: 0.15rem; }
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.server-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.server-card { display: flex; flex-direction: column; gap: 0.5rem; }
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.conn-dot.on { background: var(--success); }
+.conn-dot.off { background: var(--text-dim); }
+</style>
+
 <div class="page-header">
     <h1>Metrics</h1>
+    <div style="display:flex; align-items:center; gap:1rem;">
+        <span class="updated-at" x-data x-text="$store.all.updatedAt"></span>
+        <span class="live-badge" x-data x-show="$store.all.live">LIVE</span>
+    </div>
 </div>
 
 {% if servers %}
-<div class="grid-3">
-    {% for srv in servers %}
-    <a href="/metrics/{{ srv.id }}" style="text-decoration:none;">
-        <div class="card" style="cursor:pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
-            <div class="card-body" style="text-align:center; padding: 2rem;">
-                <div style="font-size: 1.1rem; font-weight: 700; color: var(--primary);">{{ srv.name }}</div>
-                <div class="text-dim text-sm mt-1">View Metrics</div>
+<div x-data x-init="$store.all.connect()">
+
+    <template x-if="$store.all.error">
+        <div class="flash flash-error" x-text="$store.all.error"></div>
+    </template>
+
+    <!-- Top stat cards -->
+    <div class="grid-4 mb-2">
+        <div class="card">
+            <div class="card-body" style="text-align:center; padding:1.25rem;">
+                <div class="stat-val" style="color:var(--primary);" x-text="$store.all.connectedLabel()"></div>
+                <div class="stat-lbl">Servers Connected</div>
             </div>
         </div>
-    </a>
-    {% endfor %}
+        <div class="card">
+            <div class="card-body" style="text-align:center; padding:1.25rem;">
+                <div class="stat-val" style="color:var(--warning);" x-text="$store.all.latency()"></div>
+                <div class="stat-lbl">Avg Latency</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body" style="text-align:center; padding:1.25rem;">
+                <div class="stat-val" style="color:var(--success);" x-text="$store.all.hitRatio() + '%'"></div>
+                <div class="stat-lbl">Cache Hit Ratio</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body" style="text-align:center; padding:1.25rem;">
+                <div class="stat-val" style="color:var(--text-dim);" x-text="$store.all.stat('backend-queries')"></div>
+                <div class="stat-lbl">Backend Queries</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts row -->
+    <template x-if="$store.all.data">
+    <div class="charts-grid">
+        <!-- Queries -->
+        <div class="card">
+            <div class="card-header" style="padding:0.75rem 1rem; font-size:0.875rem;">Queries per Server</div>
+            <div class="card-body" style="padding:0.75rem 1rem;">
+                <div class="chart-wrap"><canvas id="chartQueries"></canvas></div>
+                <div class="sub-stats">
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('udp-queries')"></div>
+                        <div class="sub-stat-lbl">UDP queries</div>
+                    </div>
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('tcp-queries')"></div>
+                        <div class="sub-stat-lbl">TCP queries</div>
+                    </div>
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('rd-queries') || '0'"></div>
+                        <div class="sub-stat-lbl">Recursing</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Cache -->
+        <div class="card">
+            <div class="card-header" style="padding:0.75rem 1rem; font-size:0.875rem;">Cache Hit % per Server</div>
+            <div class="card-body" style="padding:0.75rem 1rem;">
+                <div class="chart-wrap"><canvas id="chartCache"></canvas></div>
+                <div class="sub-stats">
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('packetcache-hit')"></div>
+                        <div class="sub-stat-lbl">Hits</div>
+                    </div>
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('packetcache-miss')"></div>
+                        <div class="sub-stat-lbl">Misses</div>
+                    </div>
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.hitRatio() + '%'"></div>
+                        <div class="sub-stat-lbl">Hit ratio</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Errors -->
+        <div class="card">
+            <div class="card-header" style="padding:0.75rem 1rem; font-size:0.875rem;">Errors per Server</div>
+            <div class="card-body" style="padding:0.75rem 1rem;">
+                <div class="chart-wrap"><canvas id="chartErrors"></canvas></div>
+                <div class="sub-stats">
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('servfail-packets')"></div>
+                        <div class="sub-stat-lbl">SERVFAIL</div>
+                    </div>
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('nxdomain-packets') || '0'"></div>
+                        <div class="sub-stat-lbl">NXDOMAIN</div>
+                    </div>
+                    <div class="sub-stat">
+                        <div class="sub-stat-val" x-text="$store.all.stat('corrupt-packets')"></div>
+                        <div class="sub-stat-lbl">Corrupt</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </template>
+
+    <!-- Per-server cards -->
+    <div class="card-header mb-1" style="padding:0.5rem 0; font-size:0.875rem; font-weight:600; color:var(--text-dim); border:none; background:none;">Servers</div>
+    <div class="server-cards">
+        {% for srv in servers %}
+        <div class="card server-card">
+            <div class="card-body" style="padding:1rem;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+                    <div style="font-weight:700; font-size:1rem;">{{ srv.name }}</div>
+                    <span x-data
+                        :class="$store.all.isConnected({{ srv.id }}) ? 'conn-dot on' : 'conn-dot off'"
+                        :title="$store.all.isConnected({{ srv.id }}) ? 'Connected' : 'Disconnected'">
+                    </span>
+                </div>
+                <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.75rem;"
+                     x-data
+                     x-text="$store.all.isConnected({{ srv.id }}) ? 'Connected' : 'Disconnected'">
+                </div>
+                <a href="/metrics/{{ srv.id }}" class="btn btn-sm" style="width:100%; text-align:center; display:block;">
+                    View Details &rarr;
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
 </div>
 {% else %}
 <div class="card">
     <div class="empty-state">No active servers configured.</div>
 </div>
 {% endif %}
+
+<script>
+(function() {
+    const HISTORY = 60;
+    const SERVER_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
+
+    function makeLabels() { return Array(HISTORY).fill(''); }
+
+    function chartDefaults(datasets, extraOpts) {
+        return {
+            type: 'line',
+            data: { labels: makeLabels(), datasets },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: datasets.length > 1, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        display: true,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(51,65,85,0.6)' },
+                        ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 4 }
+                    }
+                },
+                elements: { point: { radius: 0 }, line: { tension: 0.3, borderWidth: 1.5 } },
+                ...(extraOpts || {})
+            }
+        };
+    }
+
+    function makeDs(label, color) {
+        return {
+            label,
+            data: Array(HISTORY).fill(0),
+            borderColor: color,
+            backgroundColor: 'transparent',
+            fill: false
+        };
+    }
+
+    function numStat(stats, name) {
+        if (!stats) return null;
+        const s = stats.find(s => s.name === name);
+        if (!s || s.value === null || s.value === undefined) return null;
+        const n = Number(s.value);
+        return isNaN(n) ? null : n;
+    }
+
+    function fmtNum(n) {
+        if (n === null || n === undefined) return n;
+        const num = Number(n);
+        if (isNaN(num)) return n;
+        const abs = Math.abs(num);
+        if (abs >= 1e12) return (num / 1e12).toFixed(1).replace(/\.0$/, '') + 'T';
+        if (abs >= 1e9)  return (num / 1e9).toFixed(1).replace(/\.0$/, '') + 'G';
+        if (abs >= 1e6)  return (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (abs >= 1e3)  return (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+        return String(num);
+    }
+
+    let charts = {};
+
+    function rebuildCharts(servers) {
+        Object.values(charts).forEach(c => c.destroy());
+        charts = {};
+
+        const qDs = servers.map((s, i) => makeDs(s.name, SERVER_COLORS[i % SERVER_COLORS.length]));
+        const cDs = servers.map((s, i) => makeDs(s.name, SERVER_COLORS[i % SERVER_COLORS.length]));
+        const eDs = servers.map((s, i) => makeDs(s.name, SERVER_COLORS[i % SERVER_COLORS.length]));
+
+        charts.queries = new Chart(document.getElementById('chartQueries'), chartDefaults(qDs));
+        charts.cache = new Chart(document.getElementById('chartCache'), chartDefaults(cDs, {
+            plugins: { legend: { display: cDs.length > 1, labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+                x: { display: false },
+                y: { display: true, min: 0, max: 100, grid: { color: 'rgba(51,65,85,0.6)' }, ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 4, callback: v => v + '%' } }
+            }
+        }));
+        charts.errors = new Chart(document.getElementById('chartErrors'), chartDefaults(eDs));
+    }
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('all', {
+            data: null,
+            error: null,
+            live: false,
+            updatedAt: '',
+            _prevPerServer: {},
+            _chartsReady: false,
+            _lastServerKey: '',
+
+            connect() {
+                const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${proto}//${location.host}/api/metrics/ws`);
+                ws.onmessage = (e) => {
+                    const d = JSON.parse(e.data);
+                    if (d.error) { this.error = d.error; this.live = false; return; }
+                    this.data = d;
+                    this.error = null;
+                    this.live = true;
+                    this.updatedAt = 'Updated ' + new Date().toLocaleTimeString();
+                    this._updateCharts(d);
+                };
+                ws.onerror = () => { this.error = 'WebSocket error'; this.live = false; };
+                ws.onclose = () => { this.live = false; };
+            },
+
+            _updateCharts(d) {
+                const connected = (d.servers || []).filter(s => s.connected && s.statistics);
+                const serverKey = connected.map(s => s.id).join(',');
+
+                if (!this._chartsReady || serverKey !== this._lastServerKey) {
+                    Alpine.nextTick(() => {
+                        if (document.getElementById('chartQueries')) {
+                            rebuildCharts(connected);
+                            this._chartsReady = true;
+                            this._lastServerKey = serverKey;
+                            this._applyChartUpdate(connected);
+                        }
+                    });
+                } else {
+                    this._applyChartUpdate(connected);
+                }
+            },
+
+            _applyChartUpdate(connected) {
+                if (!this._chartsReady) return;
+                const now = Date.now();
+
+                connected.forEach((srv, i) => {
+                    const prev = this._prevPerServer[srv.id];
+                    const dt = prev ? (now - prev.time) / 1000 : 1;
+
+                    const rate = (name) => {
+                        if (!prev) return 0;
+                        const cur = numStat(srv.statistics, name);
+                        const old = numStat(prev.stats, name);
+                        if (cur === null || old === null) return 0;
+                        return Math.max(0, (cur - old) / dt);
+                    };
+
+                    const hits = numStat(srv.statistics, 'packetcache-hit') || 0;
+                    const misses = numStat(srv.statistics, 'packetcache-miss') || 0;
+                    const total = hits + misses;
+                    const hitPct = total > 0 ? (hits / total) * 100 : 0;
+
+                    if (charts.queries && charts.queries.data.datasets[i]) {
+                        charts.queries.data.datasets[i].data.push(rate('udp-queries') + rate('tcp-queries'));
+                        charts.queries.data.datasets[i].data.shift();
+                    }
+                    if (charts.cache && charts.cache.data.datasets[i]) {
+                        charts.cache.data.datasets[i].data.push(hitPct);
+                        charts.cache.data.datasets[i].data.shift();
+                    }
+                    if (charts.errors && charts.errors.data.datasets[i]) {
+                        charts.errors.data.datasets[i].data.push(rate('servfail-packets') + rate('nxdomain-packets'));
+                        charts.errors.data.datasets[i].data.shift();
+                    }
+
+                    this._prevPerServer[srv.id] = { stats: srv.statistics, time: now };
+                });
+
+                ['queries', 'cache', 'errors'].forEach(k => {
+                    if (!charts[k]) return;
+                    charts[k].data.labels.push('');
+                    charts[k].data.labels.shift();
+                    charts[k].update('none');
+                });
+            },
+
+            stat(name) {
+                if (!this.data || !this.data.statistics) return '-';
+                const s = this.data.statistics.find(s => s.name === name);
+                if (!s || s.value === null || s.value === undefined) return '-';
+                const n = Number(s.value);
+                return isNaN(n) ? s.value : fmtNum(n);
+            },
+
+            latency() {
+                const v = this.stat('latency');
+                return v !== '-' ? v + ' ms' : '-';
+            },
+
+            hitRatio() {
+                if (!this.data || !this.data.statistics) return '0.0';
+                const hits = numStat(this.data.statistics, 'packetcache-hit') || 0;
+                const misses = numStat(this.data.statistics, 'packetcache-miss') || 0;
+                const total = hits + misses;
+                if (total === 0) return '0.0';
+                return ((hits / total) * 100).toFixed(1);
+            },
+
+            connectedLabel() {
+                if (!this.data) return '-';
+                return `${this.data.connected_count}/${this.data.total_count}`;
+            },
+
+            isConnected(serverId) {
+                if (!this.data || !this.data.servers) return false;
+                const s = this.data.servers.find(s => s.id === serverId);
+                return s ? s.connected : false;
+            },
+        });
+    });
+})();
+</script>
 {% endblock %}

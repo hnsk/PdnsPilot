@@ -10,6 +10,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 
+use base64::Engine as _;
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use crate::repositories::{pdns_server_repo, zone_assignment_repo};
@@ -126,6 +127,18 @@ fn rtype_name(t: u16) -> String {
         16 => "TXT".into(),
         28 => "AAAA".into(),
         33 => "SRV".into(),
+        43 => "DS".into(),
+        44 => "SSHFP".into(),
+        46 => "RRSIG".into(),
+        47 => "NSEC".into(),
+        48 => "DNSKEY".into(),
+        50 => "NSEC3".into(),
+        51 => "NSEC3PARAM".into(),
+        52 => "TLSA".into(),
+        59 => "CDS".into(),
+        60 => "CDNSKEY".into(),
+        99 => "SPF".into(),
+        257 => "CAA".into(),
         _ => format!("TYPE{t}"),
     }
 }
@@ -141,13 +154,54 @@ fn rtype_num(name: &str) -> u16 {
         "TXT" => 16,
         "AAAA" => 28,
         "SRV" => 33,
+        "DS" => 43,
+        "SSHFP" => 44,
+        "RRSIG" => 46,
+        "NSEC" => 47,
+        "DNSKEY" => 48,
+        "NSEC3" => 50,
+        "NSEC3PARAM" => 51,
+        "TLSA" => 52,
+        "CDS" => 59,
+        "CDNSKEY" => 60,
+        "SPF" => 99,
+        "CAA" => 257,
         "ANY" => 255,
         "AXFR" => 252,
         _ => 1,
     }
 }
 
+/// Decode NSEC/NSEC3 type bitmap into space-separated type names.
+fn parse_type_bitmap(data: &[u8]) -> String {
+    let mut types = Vec::new();
+    let mut i = 0;
+    while i + 2 <= data.len() {
+        let window = data[i] as u16;
+        let bitmap_len = data[i + 1] as usize;
+        i += 2;
+        if i + bitmap_len > data.len() { break; }
+        for byte_idx in 0..bitmap_len {
+            let byte = data[i + byte_idx];
+            for bit in 0..8u16 {
+                if byte & (0x80 >> bit) != 0 {
+                    let type_num = window * 256 + byte_idx as u16 * 8 + bit;
+                    types.push(rtype_name(type_num));
+                }
+            }
+        }
+        i += bitmap_len;
+    }
+    types.join(" ")
+}
+
+fn b64(data: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(data)
+}
+
 fn parse_rdata(pkt: &[u8], pos: usize, len: usize, rtype: u16) -> String {
+    let end = (pos + len).min(pkt.len());
+    if pos > pkt.len() { return "<invalid>".into(); }
     match rtype {
         1 => { // A
             if len >= 4 {
@@ -172,10 +226,10 @@ fn parse_rdata(pkt: &[u8], pos: usize, len: usize, rtype: u16) -> String {
             let (name, _) = parse_name(pkt, pos + 2);
             format!("{pref} {name}.")
         }
-        16 => { // TXT
+        16 | 99 => { // TXT, SPF
             let mut result = String::new();
             let mut i = pos;
-            while i < pos + len {
+            while i < end {
                 let slen = pkt[i] as usize;
                 i += 1;
                 if i + slen <= pkt.len() {
@@ -197,8 +251,134 @@ fn parse_rdata(pkt: &[u8], pos: usize, len: usize, rtype: u16) -> String {
             let minimum = read_u32(pkt, p3 + 16);
             format!("{mname}. {rname}. {serial} {refresh} {retry} {expire} {minimum}")
         }
-        _ => hex::encode(&pkt[pos..pos+len.min(pkt.len()-pos)])
+        33 => { // SRV
+            if len >= 6 {
+                let priority = read_u16(pkt, pos);
+                let weight = read_u16(pkt, pos + 2);
+                let port = read_u16(pkt, pos + 4);
+                let (target, _) = parse_name(pkt, pos + 6);
+                format!("{priority} {weight} {port} {target}.")
+            } else { "<invalid>".into() }
+        }
+        43 | 59 => { // DS, CDS
+            if len >= 4 {
+                let key_tag = read_u16(pkt, pos);
+                let algorithm = pkt[pos + 2];
+                let digest_type = pkt[pos + 3];
+                let digest = hex::encode(&pkt[pos + 4..end]);
+                format!("{key_tag} {algorithm} {digest_type} {digest}")
+            } else { "<invalid>".into() }
+        }
+        44 => { // SSHFP
+            if len >= 2 {
+                let algorithm = pkt[pos];
+                let fp_type = pkt[pos + 1];
+                let fingerprint = hex::encode(&pkt[pos + 2..end]);
+                format!("{algorithm} {fp_type} {fingerprint}")
+            } else { "<invalid>".into() }
+        }
+        46 => { // RRSIG
+            if len >= 18 {
+                let type_covered = read_u16(pkt, pos);
+                let algorithm = pkt[pos + 2];
+                let labels = pkt[pos + 3];
+                let orig_ttl = read_u32(pkt, pos + 4);
+                let sig_exp = read_u32(pkt, pos + 8);
+                let sig_inc = read_u32(pkt, pos + 12);
+                let key_tag = read_u16(pkt, pos + 16);
+                let (signer, sig_start) = parse_name(pkt, pos + 18);
+                let sig = if sig_start < end { b64(&pkt[sig_start..end]) } else { String::new() };
+                format!("{} {algorithm} {labels} {orig_ttl} {sig_exp} {sig_inc} {key_tag} {signer}. {sig}",
+                    rtype_name(type_covered))
+            } else { "<invalid>".into() }
+        }
+        47 => { // NSEC
+            let (next_name, bitmap_start) = parse_name(pkt, pos);
+            let bitmap = if bitmap_start < end { parse_type_bitmap(&pkt[bitmap_start..end]) } else { String::new() };
+            format!("{next_name}. {bitmap}")
+        }
+        48 | 60 => { // DNSKEY, CDNSKEY
+            if len >= 4 {
+                let flags = read_u16(pkt, pos);
+                let protocol = pkt[pos + 2];
+                let algorithm = pkt[pos + 3];
+                let key = b64(&pkt[pos + 4..end]);
+                format!("{flags} {protocol} {algorithm} {key}")
+            } else { "<invalid>".into() }
+        }
+        50 => { // NSEC3
+            if len >= 5 {
+                let hash_alg = pkt[pos];
+                let flags = pkt[pos + 1];
+                let iterations = read_u16(pkt, pos + 2);
+                let salt_len = pkt[pos + 4] as usize;
+                let salt_end = pos + 5 + salt_len;
+                if salt_end > pkt.len() { return "<invalid>".into(); }
+                let salt = if salt_len > 0 { hex::encode(&pkt[pos + 5..salt_end]) } else { "-".into() };
+                if salt_end >= pkt.len() { return "<invalid>".into(); }
+                let hash_len = pkt[salt_end] as usize;
+                let hash_end = salt_end + 1 + hash_len;
+                if hash_end > pkt.len() { return "<invalid>".into(); }
+                let hash = data_encoding_b32hex(&pkt[salt_end + 1..hash_end]);
+                let bitmap = if hash_end < end { parse_type_bitmap(&pkt[hash_end..end]) } else { String::new() };
+                format!("{hash_alg} {flags} {iterations} {salt} {hash} {bitmap}")
+            } else { "<invalid>".into() }
+        }
+        51 => { // NSEC3PARAM
+            if len >= 5 {
+                let hash_alg = pkt[pos];
+                let flags = pkt[pos + 1];
+                let iterations = read_u16(pkt, pos + 2);
+                let salt_len = pkt[pos + 4] as usize;
+                let salt_end = pos + 5 + salt_len;
+                let salt = if salt_len > 0 && salt_end <= pkt.len() {
+                    hex::encode(&pkt[pos + 5..salt_end])
+                } else { "-".into() };
+                format!("{hash_alg} {flags} {iterations} {salt}")
+            } else { "<invalid>".into() }
+        }
+        52 => { // TLSA
+            if len >= 3 {
+                let usage = pkt[pos];
+                let selector = pkt[pos + 1];
+                let matching_type = pkt[pos + 2];
+                let cert_data = hex::encode(&pkt[pos + 3..end]);
+                format!("{usage} {selector} {matching_type} {cert_data}")
+            } else { "<invalid>".into() }
+        }
+        257 => { // CAA
+            if len >= 2 {
+                let flags = pkt[pos];
+                let tag_len = pkt[pos + 1] as usize;
+                let tag_end = pos + 2 + tag_len;
+                if tag_end > pkt.len() { return "<invalid>".into(); }
+                let tag = String::from_utf8_lossy(&pkt[pos + 2..tag_end]);
+                let value = String::from_utf8_lossy(&pkt[tag_end..end]);
+                format!("{flags} {tag} \"{value}\"")
+            } else { "<invalid>".into() }
+        }
+        _ => hex::encode(&pkt[pos..end])
     }
+}
+
+/// Base32hex encoding for NSEC3 hashes (RFC 4648 extended hex alphabet, no padding).
+fn data_encoding_b32hex(data: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUV";
+    let mut out = String::new();
+    let mut bits: u32 = 0;
+    let mut bit_count = 0u32;
+    for &byte in data {
+        bits = (bits << 8) | byte as u32;
+        bit_count += 8;
+        while bit_count >= 5 {
+            bit_count -= 5;
+            out.push(ALPHABET[((bits >> bit_count) & 0x1F) as usize] as char);
+        }
+    }
+    if bit_count > 0 {
+        out.push(ALPHABET[((bits << (5 - bit_count)) & 0x1F) as usize] as char);
+    }
+    out
 }
 
 async fn do_lookup(name: &str, rtype_str: &str, host: &str) -> anyhow::Result<Vec<Value>> {

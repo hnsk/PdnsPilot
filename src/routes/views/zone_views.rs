@@ -108,8 +108,15 @@ async fn zones_list(State(state): State<AppState>, jar: CookieJar) -> Response {
     }
 
     let zone_templates = zone_template_repo::list_templates(&state.db).await.unwrap_or_default();
+
+    // For non-admins, only expose servers that have at least one visible zone.
+    let visible_server_ids: std::collections::HashSet<i64> = all_zones
+        .iter()
+        .filter_map(|z| z.get("_server_id").and_then(|v| v.as_i64()))
+        .collect();
     let pdns_servers: Vec<_> = active_servers
         .iter()
+        .filter(|s| user.role == "admin" || visible_server_ids.contains(&s.id))
         .map(|s| json!({"id": s.id, "name": s.name, "api_url": s.api_url, "server_id": s.server_id, "is_active": s.is_active}))
         .collect();
 

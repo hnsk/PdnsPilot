@@ -8,84 +8,148 @@
     {% endif %}
 </div>
 
-<div class="card" x-data="{ search: '' }">
-    <div class="card-header">
-        <input type="text" x-model="search" placeholder="Filter zones..." style="width: 280px; padding: 0.3rem 0.6rem; font-size: 0.875rem;">
-        <span class="text-dim text-sm">{{ zones | length }} zone(s)</span>
+<script>
+var allZonesData = {{ zones | tojson }};
+var pdnsServersData = {{ pdns_servers | tojson }};
+var isAdmin = {{ user.role == 'admin' | tojson }};
+</script>
+
+<div class="card" x-data="{
+    search: '',
+    sortCol: 'name',
+    sortDir: 1,
+    serverFilter: 'all',
+    zones: allZonesData,
+    get filtered() {
+        let result = this.zones;
+        if (this.serverFilter !== 'all') {
+            result = result.filter(z => String(z._server_id) === String(this.serverFilter));
+        }
+        if (this.search) {
+            const q = this.search.toLowerCase();
+            result = result.filter(z => (z.name || '').toLowerCase().includes(q));
+        }
+        const col = this.sortCol;
+        const dir = this.sortDir;
+        result = [...result].sort((a, b) => {
+            let av = a[col] != null ? String(a[col]).toLowerCase() : '';
+            let bv = b[col] != null ? String(b[col]).toLowerCase() : '';
+            if (av < bv) return -dir;
+            if (av > bv) return dir;
+            return 0;
+        });
+        return result;
+    },
+    sortBy(col) {
+        if (this.sortCol === col) { this.sortDir *= -1; }
+        else { this.sortCol = col; this.sortDir = 1; }
+    },
+    sortIcon(col) {
+        if (this.sortCol !== col) return '';
+        return this.sortDir === 1 ? ' ▲' : ' ▼';
+    }
+}">
+    <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem;">
+        <input type="text" x-model="search" placeholder="Filter zones..." style="width: 220px; padding: 0.3rem 0.6rem; font-size: 0.875rem;">
+        <select x-model="serverFilter" style="padding: 0.3rem 0.6rem; font-size: 0.875rem;">
+            <option value="all">All servers</option>
+            <template x-for="srv in pdnsServersData" :key="srv.id">
+                <option :value="String(srv.id)" x-text="srv.name"></option>
+            </template>
+        </select>
+        <span class="text-dim text-sm" x-text="filtered.length + ' zone(s)'"></span>
     </div>
-    {% if zones %}
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Kind</th>
-                <th>Serial</th>
-                <th>DNSSEC</th>
-                <th>Server</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for z in zones %}
-        <tr x-show="!search || '{{ z.name }}'.toLowerCase().includes(search.toLowerCase())">
-            <td class="mono"><a href="/zones/{{ z.name }}?server_id={{ z._server_id }}">{{ z.name }}</a></td>
-            <td>
-                {% if z.kind == 'Native' %}
-                <span class="badge badge-blue">{{ z.kind }}</span>
-                {% elif z.kind == 'Master' or z.kind == 'Primary' %}
-                <span class="badge badge-green">{{ z.kind }}</span>
-                {% elif z.kind == 'Slave' or z.kind == 'Secondary' %}
-                <span class="badge badge-yellow">{{ z.kind }}</span>
-                {% else %}
-                <span class="badge badge-gray">{{ z.kind }}</span>
-                {% endif %}
-            </td>
-            <td class="mono text-sm text-dim">{{ z.serial or '-' }}</td>
-            <td>
-                {% if z.dnssec %}
-                <span class="badge badge-green">yes</span>
-                {% else %}
-                <span class="badge badge-gray">no</span>
-                {% endif %}
-            </td>
-            <td class="text-sm text-dim">{{ z._server_name }}</td>
-            <td>
-                <div class="btn-group">
-                    <a href="/zones/{{ z.name }}?server_id={{ z._server_id }}" class="btn btn-sm">Edit</a>
-                    {% if user.role == 'admin' %}
-                    <a href="/zones/{{ z.name }}/export?server_id={{ z._server_id }}" class="btn btn-sm">Export</a>
-                    <button class="btn btn-danger btn-sm" x-data
-                        @click="if(confirm('Delete zone {{ z.name }}?')) {
-                            fetch('/api/zones/{{ z.name }}?server_id={{ z._server_id }}', {method:'DELETE'})
-                                .then(r => { if(r.ok) location.reload(); else r.json().then(d => alert(d.detail || 'Error')); });
-                        }">Delete</button>
-                    {% endif %}
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty-state">
-        <p>No zones found.</p>
-        {% if user.role == 'admin' %}
-        <p class="text-dim text-sm mt-1">Create a zone to get started.</p>
-        {% endif %}
-    </div>
-    {% endif %}
+    <template x-if="zones.length === 0">
+        <div class="empty-state">
+            <p>No zones found.</p>
+            <template x-if="isAdmin">
+                <p class="text-dim text-sm mt-1">Create a zone to get started.</p>
+            </template>
+        </div>
+    </template>
+    <template x-if="zones.length > 0">
+        <table>
+            <thead>
+                <tr>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('name')">Name<span x-text="sortIcon('name')"></span></th>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('kind')">Kind<span x-text="sortIcon('kind')"></span></th>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('serial')">Serial<span x-text="sortIcon('serial')"></span></th>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('dnssec')">DNSSEC<span x-text="sortIcon('dnssec')"></span></th>
+                    <th style="cursor:pointer; user-select:none;" @click="sortBy('_server_name')">Server<span x-text="sortIcon('_server_name')"></span></th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="z in filtered" :key="z.name + '_' + z._server_id">
+                    <tr>
+                        <td class="mono"><a :href="'/zones/' + z.name + '?server_id=' + z._server_id" x-text="z.name"></a></td>
+                        <td>
+                            <span :class="'badge ' + (['Master','Primary'].includes(z.kind) ? 'badge-green' : z.kind === 'Native' ? 'badge-blue' : ['Slave','Secondary'].includes(z.kind) ? 'badge-yellow' : 'badge-gray')" x-text="z.kind"></span>
+                        </td>
+                        <td class="mono text-sm text-dim" x-text="z.serial || '-'"></td>
+                        <td>
+                            <span :class="'badge ' + (z.dnssec ? 'badge-green' : 'badge-gray')" x-text="z.dnssec ? 'yes' : 'no'"></span>
+                        </td>
+                        <td class="text-sm text-dim" x-text="z._server_name"></td>
+                        <td>
+                            <div class="btn-group">
+                                <a :href="'/zones/' + z.name + '?server_id=' + z._server_id" class="btn btn-sm">Edit</a>
+                                <template x-if="isAdmin">
+                                    <a :href="'/zones/' + z.name + '/export?server_id=' + z._server_id" class="btn btn-sm">Export</a>
+                                </template>
+                                <template x-if="isAdmin">
+                                    <button class="btn btn-danger btn-sm"
+                                        @click="if(confirm('Delete zone ' + z.name + '?')) {
+                                            fetch('/api/zones/' + z.name + '?server_id=' + z._server_id, {method:'DELETE'})
+                                                .then(r => { if(r.ok) location.reload(); else r.json().then(d => alert(d.detail || 'Error')); });
+                                        }">Delete</button>
+                                </template>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </template>
 </div>
 
 {% if user.role == 'admin' %}
 <!-- Create Zone Modal -->
+<script>
+var zoneTemplateData = {
+    {% for tmpl in zone_templates %}
+    "{{ tmpl.id }}": {
+        nameservers: {{ tmpl.nameservers | tojson }},
+        soa_mname: {{ tmpl.soa_mname | tojson }},
+        soa_rname: {{ tmpl.soa_rname | tojson }},
+        soa_refresh: {{ tmpl.soa_refresh }},
+        soa_retry: {{ tmpl.soa_retry }},
+        soa_expire: {{ tmpl.soa_expire }},
+        soa_ttl: {{ tmpl.soa_ttl }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+</script>
 <div id="create-zone-modal" class="modal-overlay" style="display:none"
     x-data="{
         name: '', kind: 'Native', server_id: '',
-        nameservers: '', soa_mname: '', soa_rname: '',
+        nameservers: '', masters: '',
+        soa_mname: '', soa_rname: '',
         soa_refresh: 3600, soa_retry: 900, soa_expire: 604800, soa_ttl: 300,
-        template_id: '',
         loading: false, error: '',
-        get useTemplate() { return this.template_id !== ''; }
+        get isSlave() { return this.kind === 'Slave'; },
+        applyTemplate(id) {
+            if (!id) return;
+            var t = zoneTemplateData[id];
+            if (!t) return;
+            this.nameservers = t.nameservers.join('\n');
+            this.soa_mname = t.soa_mname;
+            this.soa_rname = t.soa_rname;
+            this.soa_refresh = t.soa_refresh;
+            this.soa_retry = t.soa_retry;
+            this.soa_expire = t.soa_expire;
+            this.soa_ttl = t.soa_ttl;
+        }
     }">
     <div class="modal" style="max-width: 600px;">
         <div class="modal-header">
@@ -94,9 +158,17 @@
         </div>
         <form @submit.prevent="
             loading = true; error = '';
-            let body = { name, kind, server_id: parseInt(server_id), nameservers: nameservers.split('\n').map(s=>s.trim()).filter(Boolean), masters: [] };
-            if (template_id) { body.template_id = parseInt(template_id); }
-            else if (soa_mname && soa_rname) { body.soa_mname = soa_mname; body.soa_rname = soa_rname; body.soa_refresh = parseInt(soa_refresh); body.soa_retry = parseInt(soa_retry); body.soa_expire = parseInt(soa_expire); body.soa_ttl = parseInt(soa_ttl); }
+            let ns = nameservers.split('\n').map(s=>s.trim()).filter(Boolean);
+            let ms = masters.split('\n').map(s=>s.trim()).filter(Boolean);
+            let body = { name, kind, server_id: parseInt(server_id), nameservers: isSlave ? [] : ns, masters: ms };
+            if (!isSlave) {
+                body.soa_mname = soa_mname;
+                body.soa_rname = soa_rname;
+                body.soa_refresh = parseInt(soa_refresh);
+                body.soa_retry = parseInt(soa_retry);
+                body.soa_expire = parseInt(soa_expire);
+                body.soa_ttl = parseInt(soa_ttl);
+            }
             fetch('/api/zones', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
                 .then(r => r.ok ? location.reload() : r.json().then(d => { error = d.detail || 'Failed'; loading = false; }))
                 .catch(() => { error = 'Connection error'; loading = false; });
@@ -125,10 +197,11 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <template x-if="!isSlave">
                     {% if zone_templates %}
                     <div class="form-group" style="grid-column: span 2;">
                         <label>Zone Template (optional)</label>
-                        <select x-model="template_id">
+                        <select @change="applyTemplate($event.target.value)">
                             <option value="">No template (manual SOA)</option>
                             {% for tmpl in zone_templates %}
                             <option value="{{ tmpl.id }}">{{ tmpl.name }}</option>
@@ -136,41 +209,46 @@
                         </select>
                     </div>
                     {% endif %}
+                    </template>
                 </div>
-                <template x-if="!useTemplate">
-                    <div>
+                <div x-show="isSlave">
+                    <div class="form-group">
+                        <label>Master IPs (one per line)</label>
+                        <textarea x-model="masters" rows="3" placeholder="192.0.2.1&#10;192.0.2.2"></textarea>
+                    </div>
+                </div>
+                <div x-show="!isSlave">
+                    <div class="form-group">
+                        <label>Nameservers (one per line)</label>
+                        <textarea x-model="nameservers" rows="3" placeholder="ns1.example.com&#10;ns2.example.com"></textarea>
+                    </div>
+                    <div class="grid-2">
                         <div class="form-group">
-                            <label>Nameservers (one per line)</label>
-                            <textarea x-model="nameservers" rows="3" placeholder="ns1.example.com&#10;ns2.example.com"></textarea>
+                            <label>SOA Primary (mname)</label>
+                            <input type="text" x-model="soa_mname" placeholder="ns1.example.com">
                         </div>
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label>SOA Primary (mname)</label>
-                                <input type="text" x-model="soa_mname" placeholder="ns1.example.com">
-                            </div>
-                            <div class="form-group">
-                                <label>SOA Email (rname)</label>
-                                <input type="text" x-model="soa_rname" placeholder="hostmaster.example.com">
-                            </div>
-                            <div class="form-group">
-                                <label>Refresh</label>
-                                <input type="number" x-model="soa_refresh">
-                            </div>
-                            <div class="form-group">
-                                <label>Retry</label>
-                                <input type="number" x-model="soa_retry">
-                            </div>
-                            <div class="form-group">
-                                <label>Expire</label>
-                                <input type="number" x-model="soa_expire">
-                            </div>
-                            <div class="form-group">
-                                <label>Minimum TTL</label>
-                                <input type="number" x-model="soa_ttl">
-                            </div>
+                        <div class="form-group">
+                            <label>SOA Email (rname)</label>
+                            <input type="text" x-model="soa_rname" placeholder="hostmaster.example.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Refresh</label>
+                            <input type="number" x-model="soa_refresh">
+                        </div>
+                        <div class="form-group">
+                            <label>Retry</label>
+                            <input type="number" x-model="soa_retry">
+                        </div>
+                        <div class="form-group">
+                            <label>Expire</label>
+                            <input type="number" x-model="soa_expire">
+                        </div>
+                        <div class="form-group">
+                            <label>Minimum TTL</label>
+                            <input type="number" x-model="soa_ttl">
                         </div>
                     </div>
-                </template>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn" onclick="this.closest('.modal-overlay').style.display='none'">Cancel</button>

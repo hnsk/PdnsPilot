@@ -11,6 +11,11 @@
             var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
             a.download = '{{ zone_id }}.zone'; a.click();
         ">Download</button>
+        <button class="btn" onclick="
+            navigator.clipboard.writeText(document.getElementById('export-content').textContent)
+                .then(function() { showToast('Copied to clipboard'); })
+                .catch(function() { showToast('Copy failed', 'error'); });
+        ">Copy</button>
     </div>
 </div>
 
