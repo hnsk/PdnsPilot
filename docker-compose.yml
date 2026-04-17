@@ -1,10 +1,10 @@
 version: "3.9"
 
 services:
-  pdns-rustadmin:
+  pdnspilot:
     build: .
-    image: pdns-rustadmin:latest
-    container_name: pdns-rustadmin
+    image: pdnspilot:latest
+    container_name: pdnspilot
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -16,7 +16,7 @@ services:
       PDNSPILOT_SESSION_LIFETIME_HOURS: ${PDNSPILOT_SESSION_LIFETIME_HOURS:-8}
       PDNSPILOT_DEFAULT_ADMIN_PASSWORD: ${PDNSPILOT_DEFAULT_ADMIN_PASSWORD:-admin}
       BIND_ADDR: 0.0.0.0:8080
-      RUST_LOG: ${RUST_LOG:-pdns_rustadmin=info,tower_http=info}
+      RUST_LOG: ${RUST_LOG:-pdnspilot=info,tower_http=info}
 
 volumes:
   pdns-data:

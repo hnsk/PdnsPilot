@@ -1,4 +1,4 @@
-# pdns-rustadmin
+# PdnsPilot
 
 A web-based admin UI for [PowerDNS](https://www.powerdns.com/) built with Rust (Axum), SQLite, and MiniJinja templates.
 
@@ -45,7 +45,7 @@ All config via environment variables:
 | `PDNSPILOT_DEFAULT_ADMIN_PASSWORD` | `admin` | Initial admin password (change after first login) |
 | `PDNSPILOT_SESSION_LIFETIME_HOURS` | `8` | Session duration in hours |
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address |
-| `RUST_LOG` | `pdns_rustadmin=info` | Log filter |
+| `RUST_LOG` | `pdnspilot=info` | Log filter |
 
 ## Build from source
 
@@ -53,7 +53,7 @@ Requires Rust stable and the `sqlx-cli` for offline query compilation:
 
 ```bash
 cargo build --release
-./target/release/pdns-rustadmin
+./target/release/pdnspilot
 ```
 
 ## Disclaimer

@@ -19,7 +19,7 @@ FROM alpine:3.19
 RUN apk add --no-cache ca-certificates libgcc
 
 WORKDIR /app
-COPY --from=builder /build/target/release/pdns-rustadmin /app/pdns-rustadmin
+COPY --from=builder /build/target/release/pdnspilot /app/pdnspilot
 COPY templates ./templates
 COPY static ./static
 
@@ -30,4 +30,4 @@ ENV BIND_ADDR=0.0.0.0:8080
 
 EXPOSE 8080
 
-CMD ["/app/pdns-rustadmin"]
+CMD ["/app/pdnspilot"]

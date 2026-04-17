@@ -1,10 +1,10 @@
 [package]
-name = "pdns-rustadmin"
+name = "pdnspilot"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "pdns-rustadmin"
+name = "pdnspilot"
 path = "src/main.rs"
 
 [dependencies]
