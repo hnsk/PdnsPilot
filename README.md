@@ -2,7 +2,7 @@
 
 A web-based admin UI for [PowerDNS](https://www.powerdns.com/) built with Rust (Axum), SQLite, and MiniJinja templates.
 
-> **Hobby/Research Project** — This is a personal experiment. No maintenance guarantees, no support, no roadmap. Use at your own risk.
+> **Hobby/Research Project** — This is a personal experiment built 100% with [Claude Code](https://claude.ai/code), including the project name. 🙂 No maintenance guarantees, no support, no roadmap. Use at your own risk.
 
 ## What it does
 
