@@ -83,6 +83,7 @@ fn parse_name(pkt: &[u8], mut pos: usize) -> (String, usize) {
     let mut parts = Vec::new();
     let mut jumped = false;
     let mut end_pos = pos;
+    let mut jumps = 0usize;
     loop {
         if pos >= pkt.len() { break; }
         let len = pkt[pos] as usize;
@@ -92,9 +93,11 @@ fn parse_name(pkt: &[u8], mut pos: usize) -> (String, usize) {
         }
         if (len & 0xC0) == 0xC0 {
             if pos + 1 >= pkt.len() { break; }
-            let ptr = (((len & 0x3F) as usize) << 8) | pkt[pos + 1] as usize;
+            let ptr = ((len & 0x3F) << 8) | pkt[pos + 1] as usize;
             if !jumped { end_pos = pos + 2; }
             jumped = true;
+            jumps += 1;
+            if jumps > 64 { break; }
             pos = ptr;
         } else {
             pos += 1;
