@@ -43,6 +43,7 @@
                 <button class="btn btn-sm btn-primary" @click="openAdd()">+ Add Server</button>
             </div>
             <div class="card-body" style="padding:0">
+                <div id="srv-table-flash" style="padding:0 1rem"></div>
                 <template x-if="servers.length === 0 && !showForm">
                     <p style="padding:1rem; color:var(--text-dim);">No servers configured. Add one to start managing zones.</p>
                 </template>
@@ -267,12 +268,16 @@ function pdnsServers() {
         openAdd() {
             this.editId = null;
             this.form = { name: '', api_url: '', api_key: '', server_id: 'localhost', is_active: true };
+            document.getElementById('srv-table-flash').innerHTML = '';
+            document.getElementById('srv-flash').innerHTML = '';
             this.showForm = true;
         },
 
         openEdit(s) {
             this.editId = s.id;
             this.form = { name: s.name, api_url: s.api_url, api_key: '', server_id: s.server_id, is_active: s.is_active };
+            document.getElementById('srv-table-flash').innerHTML = '';
+            document.getElementById('srv-flash').innerHTML = '';
             this.showForm = true;
         },
 
@@ -324,14 +329,25 @@ function pdnsServers() {
             }
         },
 
+        tableFlash(msg, type) {
+            const el = document.getElementById('srv-table-flash');
+            const div = document.createElement('div');
+            div.className = `flash flash-${type}`;
+            div.style.margin = '.5rem 0';
+            div.textContent = msg;
+            el.replaceChildren(div);
+        },
+
         async testServer(id) {
+            document.getElementById('srv-table-flash').innerHTML = '';
+            this.tableFlash('Testing connection…', 'info');
             const resp = await fetch(`/api/pdns-servers/${id}/test`, { method: 'POST' });
             if (resp.ok) {
                 const data = await resp.json();
-                this.flash(`Connection OK — ${data.detail}`, 'success');
+                this.tableFlash(`Connection OK — ${data.detail}`, 'success');
             } else {
                 const err = await resp.json().catch(() => ({detail: 'Connection failed'}));
-                this.flash(err.detail, 'error');
+                this.tableFlash(err.detail, 'error');
             }
         },
 

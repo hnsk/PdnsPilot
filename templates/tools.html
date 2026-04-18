@@ -19,20 +19,34 @@
             <div class="card-body">
                 <div class="form-group">
                     <label>Zone (FQDN)</label>
-                    {% if accessible_zones %}
-                    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-                        <select @change="if($event.target.value) axfr.zone = $event.target.value" style="width:auto;">
-                            <option value="">— select zone —</option>
-                            {% for z in accessible_zones %}
-                            <option value="{{ z }}">{{ z }}</option>
-                            {% endfor %}
-                        </select>
-                        <span class="text-dim" style="font-size:0.85em;">or</span>
-                        <input type="text" x-model="axfr.zone" placeholder="example.com." style="width:16rem;" />
+                    <div style="position:relative; display:inline-block;" @click.outside="axfr.zoneOpen = false">
+                        <input type="text" autocomplete="off"
+                               :value="axfr.zoneOpen ? axfr.zoneFilter : axfr.zone"
+                               @focus="axfr.zoneOpen = true; axfr.zoneFilter = ''"
+                               @input="axfr.zoneFilter = $event.target.value; axfr.zone = $event.target.value; axfr.zoneOpen = true"
+                               @keydown.escape="axfr.zoneOpen = false"
+                               @keydown.enter.prevent="axfrSelectFirstZone()"
+                               @keydown.arrow-down.prevent="axfrFocusZoneItem(0)"
+                               placeholder="example.com. or search…"
+                               style="width:20rem;" />
+                        <div x-show="axfr.zoneOpen && axfrFilteredZones().length > 0"
+                             x-cloak
+                             style="position:absolute; top:calc(100% + 2px); left:0; z-index:200; background:var(--bg-card); border:1px solid var(--border); border-radius:3px; max-height:15rem; overflow-y:auto; width:100%; min-width:20rem; box-shadow:0 4px 16px rgba(0,0,0,0.35);">
+                            <template x-for="(z, i) in axfrFilteredZones()" :key="z">
+                                <div @click="axfrSetZone(z)"
+                                     :id="'axfr-zone-' + i"
+                                     tabindex="-1"
+                                     @keydown.enter.prevent="axfrSetZone(z)"
+                                     @keydown.arrow-down.prevent="axfrFocusZoneItem(i + 1)"
+                                     @keydown.arrow-up.prevent="i === 0 ? $refs.axfrZoneInput?.focus() : axfrFocusZoneItem(i - 1)"
+                                     style="padding:0.5rem 0.85rem; cursor:pointer; font-family:var(--mono); font-size:0.82rem; outline:none;"
+                                     :style="axfr.zone === z ? 'background:var(--bg-hover); color:var(--primary);' : ''"
+                                     @mouseenter="$el.style.background='var(--bg-hover)'"
+                                     @mouseleave="$el.style.background = axfr.zone === z ? 'var(--bg-hover)' : ''"
+                                     x-text="z"></div>
+                            </template>
+                        </div>
                     </div>
-                    {% else %}
-                    <input type="text" x-model="axfr.zone" placeholder="example.com." />
-                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label>Servers</label>
@@ -203,12 +217,37 @@
                 {% if accessible_zones %}
                 <div class="form-group">
                     <label>Zone (optional)</label>
-                    <select @change="onLookupZoneChange($event.target.value)" style="width:auto;">
-                        <option value="">— any zone / enter name below —</option>
-                        {% for z in accessible_zones %}
-                        <option value="{{ z }}">{{ z }}</option>
-                        {% endfor %}
-                    </select>
+                    <div style="position:relative; display:inline-block;" @click.outside="lookup.zoneOpen = false">
+                        <div style="display:flex; gap:0.4rem; align-items:center;">
+                            <input type="text" autocomplete="off"
+                                   :value="lookup.zoneOpen ? lookup.zoneSearch : lookup.selectedZone"
+                                   @focus="lookup.zoneOpen = true; lookup.zoneSearch = ''"
+                                   @input="lookup.zoneSearch = $event.target.value; lookup.zoneOpen = true"
+                                   @keydown.escape="lookup.zoneOpen = false"
+                                   @keydown.enter.prevent="lookupSelectFirstZone()"
+                                   @keydown.arrow-down.prevent="lookupFocusZoneItem(0)"
+                                   placeholder="Search zones…"
+                                   style="width:20rem;" />
+                            <button x-show="lookup.selectedZone" class="btn btn-sm" @click="lookup.selectedZone = ''; lookup.zoneSearch = ''; lookup.zoneOpen = false" title="Clear">&times;</button>
+                        </div>
+                        <div x-show="lookup.zoneOpen && lookupFilteredZones().length > 0"
+                             x-cloak
+                             style="position:absolute; top:calc(100% + 2px); left:0; z-index:200; background:var(--bg-card); border:1px solid var(--border); border-radius:3px; max-height:15rem; overflow-y:auto; width:100%; min-width:20rem; box-shadow:0 4px 16px rgba(0,0,0,0.35);">
+                            <template x-for="(z, i) in lookupFilteredZones()" :key="z">
+                                <div @click="lookupSetZone(z)"
+                                     :id="'lookup-zone-' + i"
+                                     tabindex="-1"
+                                     @keydown.enter.prevent="lookupSetZone(z)"
+                                     @keydown.arrow-down.prevent="lookupFocusZoneItem(i + 1)"
+                                     @keydown.arrow-up.prevent="i === 0 ? $refs.lookupZoneInput?.focus() : lookupFocusZoneItem(i - 1)"
+                                     style="padding:0.5rem 0.85rem; cursor:pointer; font-family:var(--mono); font-size:0.82rem; outline:none;"
+                                     :style="lookup.selectedZone === z ? 'background:var(--bg-hover); color:var(--primary);' : ''"
+                                     @mouseenter="$el.style.background='var(--bg-hover)'"
+                                     @mouseleave="$el.style.background = lookup.zoneSearch === z ? 'var(--bg-hover)' : ''"
+                                     x-text="z"></div>
+                            </template>
+                        </div>
+                    </div>
                 </div>
                 {% endif %}
                 <div class="form-group">
@@ -366,9 +405,10 @@ function toolsPage() {
         axfrDiffsOnly: true,
         lookupDiffsOnly: true,
         results: [],
-        axfr: { zone: '', serverIds: [], customHosts: [], ignoreDnssec: true },
+        zones: {{ accessible_zones | tojson }},
+        axfr: { zone: '', zoneFilter: '', zoneOpen: false, serverIds: [], customHosts: [], ignoreDnssec: true },
         dnssecTypes: new Set(['RRSIG', 'DNSKEY', 'NSEC', 'NSEC3', 'NSEC3PARAM']),
-        lookup: { name: '', rtype: 'A', serverIds: [], customHosts: [] },
+        lookup: { name: '', zoneSearch: '', selectedZone: '', zoneOpen: false, rtype: 'A', serverIds: [], customHosts: [] },
         axfrSort: { col: null, dir: 1 },
 
         init() {
@@ -423,6 +463,45 @@ function toolsPage() {
 
         selectNone(which) {
             this[which].serverIds = [];
+        },
+
+        axfrFilteredZones() {
+            const q = (this.axfr.zoneFilter || '').toLowerCase();
+            if (!q) return this.zones;
+            return this.zones.filter(z => z.toLowerCase().includes(q));
+        },
+        axfrSetZone(z) {
+            this.axfr.zone = z;
+            this.axfr.zoneFilter = '';
+            this.axfr.zoneOpen = false;
+        },
+        axfrSelectFirstZone() {
+            const zones = this.axfrFilteredZones();
+            if (zones.length > 0) this.axfrSetZone(zones[0]);
+        },
+        axfrFocusZoneItem(i) {
+            const el = document.getElementById('axfr-zone-' + i);
+            if (el) el.focus();
+        },
+
+        lookupFilteredZones() {
+            const q = (this.lookup.zoneSearch || '').toLowerCase();
+            if (!q) return this.zones;
+            return this.zones.filter(z => z.toLowerCase().includes(q));
+        },
+        lookupSetZone(z) {
+            this.lookup.selectedZone = z;
+            this.lookup.zoneSearch = '';
+            this.lookup.zoneOpen = false;
+            this.onLookupZoneChange(z);
+        },
+        lookupSelectFirstZone() {
+            const zones = this.lookupFilteredZones();
+            if (zones.length > 0) this.lookupSetZone(zones[0]);
+        },
+        lookupFocusZoneItem(i) {
+            const el = document.getElementById('lookup-zone-' + i);
+            if (el) el.focus();
         },
 
         onLookupZoneChange(zone) {

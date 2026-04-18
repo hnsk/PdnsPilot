@@ -33,13 +33,32 @@ async fn tools_page(State(state): State<AppState>, jar: CookieJar) -> Response {
     let servers = pdns_server_repo::list_servers(&state.db).await.unwrap_or_default();
     let mut active_servers: Vec<_> = servers.into_iter().filter(|s| s.is_active).collect();
 
+    // Fetch all zone names from live PDNS API across all active servers.
+    let clients: Vec<_> = {
+        let registry = state.pdns.read();
+        active_servers
+            .iter()
+            .map(|srv| (srv.id, registry.get(srv.id)))
+            .collect()
+    };
+    let mut all_zone_names: std::collections::BTreeSet<String> = Default::default();
+    for (_, client_opt) in &clients {
+        if let Some(client) = client_opt {
+            if let Ok(zones) = client.list_zones(None).await {
+                if let Some(arr) = zones.as_array() {
+                    for z in arr {
+                        if let Some(name) = z.get("name").and_then(|v| v.as_str()) {
+                            all_zone_names.insert(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let accessible_zones: Vec<String>;
     if user.role == "admin" {
-        let rows = sqlx::query!("SELECT DISTINCT zone_name FROM zone_server_map ORDER BY zone_name")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-        accessible_zones = rows.into_iter().map(|r| r.zone_name).collect();
+        accessible_zones = all_zone_names.into_iter().collect();
     } else {
         let assignments = zone_assignment_repo::get_user_zone_assignments(&state.db, user.id)
             .await
@@ -49,13 +68,12 @@ async fn tools_page(State(state): State<AppState>, jar: CookieJar) -> Response {
             .filter_map(|a| a.pdns_server_id)
             .collect();
         active_servers.retain(|s| assigned_server_ids.contains(&s.id));
-        let zones: std::collections::HashSet<String> =
+        let assigned_names: std::collections::HashSet<String> =
             assignments.into_iter().map(|a| a.zone_name).collect();
-        accessible_zones = {
-            let mut v: Vec<String> = zones.into_iter().collect();
-            v.sort();
-            v
-        };
+        accessible_zones = all_zone_names
+            .into_iter()
+            .filter(|n| assigned_names.contains(n))
+            .collect();
     }
 
     let safe_servers: Vec<_> = active_servers

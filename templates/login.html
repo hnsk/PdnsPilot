@@ -1,31 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Login - PdnsPilot{% endblock %}
 {% block content %}
-<div style="max-width: 400px; margin: 4rem auto;">
+<div style="max-width: 380px; margin: 5rem auto;">
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="width:40px;height:40px;margin-bottom:1rem">
+            <circle cx="32" cy="32" r="30" fill="#d97706"/>
+            <circle cx="32" cy="32" r="22" fill="none" stroke="#0c0c0c" stroke-width="3.5"/>
+            <circle cx="32" cy="32" r="7" fill="none" stroke="#0c0c0c" stroke-width="3.5"/>
+            <circle cx="32" cy="32" r="2.5" fill="#0c0c0c"/>
+            <line x1="32" y1="25" x2="32" y2="10" stroke="#0c0c0c" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="38.06" y1="28.5" x2="51.05" y2="21" stroke="#0c0c0c" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="38.06" y1="35.5" x2="51.05" y2="43" stroke="#0c0c0c" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="32" y1="39" x2="32" y2="54" stroke="#0c0c0c" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="25.94" y1="35.5" x2="12.95" y2="43" stroke="#0c0c0c" stroke-width="3.5" stroke-linecap="round"/>
+            <line x1="25.94" y1="28.5" x2="12.95" y2="21" stroke="#0c0c0c" stroke-width="3.5" stroke-linecap="round"/>
+            <circle cx="32" cy="10" r="4" fill="#0c0c0c"/>
+            <circle cx="51.05" cy="21" r="4" fill="#0c0c0c"/>
+            <circle cx="51.05" cy="43" r="4" fill="#0c0c0c"/>
+            <circle cx="32" cy="54" r="4" fill="#0c0c0c"/>
+            <circle cx="12.95" cy="43" r="4" fill="#0c0c0c"/>
+            <circle cx="12.95" cy="21" r="4" fill="#0c0c0c"/>
+        </svg>
+        <div style="font-family: var(--mono); font-size: 1rem; font-weight: 600; color: var(--primary); letter-spacing: 0.05em;">PDNSPILOT</div>
+        <div style="font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem; letter-spacing: 0.1em;">DNS MANAGEMENT CONSOLE</div>
+    </div>
     <div class="card">
-        <div class="card-header">
-            <div class="brand" style="display: flex; align-items: center; gap: 0.5rem;">
-                <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="width:32px;height:32px">
-                    <circle cx="32" cy="32" r="30" fill="#1e40af"/>
-                    <circle cx="32" cy="32" r="22" fill="none" stroke="white" stroke-width="3.5"/>
-                    <circle cx="32" cy="32" r="7" fill="none" stroke="white" stroke-width="3.5"/>
-                    <circle cx="32" cy="32" r="2.5" fill="white"/>
-                    <line x1="32" y1="25" x2="32" y2="10" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-                    <line x1="38.06" y1="28.5" x2="51.05" y2="21" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-                    <line x1="38.06" y1="35.5" x2="51.05" y2="43" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-                    <line x1="32" y1="39" x2="32" y2="54" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-                    <line x1="25.94" y1="35.5" x2="12.95" y2="43" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-                    <line x1="25.94" y1="28.5" x2="12.95" y2="21" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
-                    <circle cx="32" cy="10" r="4" fill="white"/>
-                    <circle cx="51.05" cy="21" r="4" fill="white"/>
-                    <circle cx="51.05" cy="43" r="4" fill="white"/>
-                    <circle cx="32" cy="54" r="4" fill="white"/>
-                    <circle cx="12.95" cy="43" r="4" fill="white"/>
-                    <circle cx="12.95" cy="21" r="4" fill="white"/>
-                </svg>
-                PdnsPilot Login
-            </div>
-        </div>
+        <div class="card-header">AUTHENTICATE</div>
         <div class="card-body" x-data="{ username: '', password: '', error: '', loading: false }">
             {% if error %}
             <div class="flash flash-error">{{ error }}</div>
