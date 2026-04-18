@@ -997,8 +997,8 @@ function zoneUserManager() {
 
 <style>
 .user-list {
-    background: var(--input-bg, #0d1117);
-    border: 1px solid var(--border, #30363d);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 6px;
     min-height: 2.25rem;
     overflow: hidden;
@@ -1006,32 +1006,33 @@ function zoneUserManager() {
 .user-list-empty {
     padding: 0.5rem 0.75rem;
     font-size: 0.8125rem;
-    color: var(--text-dim, #8b949e);
+    color: var(--text-dim);
 }
 .user-list-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0.35rem 0.75rem;
-    border-bottom: 1px solid var(--border, #30363d);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
 }
 .user-list-row:last-child { border-bottom: none; }
 .user-list-remove {
     background: none;
     border: none;
-    color: var(--text-dim, #8b949e);
+    color: var(--text-dim);
     cursor: pointer;
     padding: 0 0.2rem;
     line-height: 1;
     font-size: 1rem;
     opacity: 0.7;
 }
-.user-list-remove:hover { opacity: 1; color: var(--danger, #f85149); }
+.user-list-remove:hover { opacity: 1; color: var(--danger); }
 .account-dropdown {
     position: absolute;
     z-index: 100;
-    background: var(--surface, #161b22);
-    border: 1px solid var(--border, #30363d);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 6px;
     margin-top: 2px;
     max-height: 14rem;
@@ -1045,8 +1046,9 @@ function zoneUserManager() {
     padding: 0.45rem 0.75rem;
     cursor: pointer;
     font-size: 0.875rem;
+    color: var(--text);
 }
-.account-option:hover, .account-option.active { background: var(--hover, #21262d); }
+.account-option:hover, .account-option.active { background: var(--bg-hover); }
 </style>
 
 {% endblock %}
