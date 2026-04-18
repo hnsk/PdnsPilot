@@ -16,6 +16,7 @@ pub struct ZoneTemplate {
     pub created_at: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_template(
     id: i64,
     name: String,

@@ -21,22 +21,14 @@ fn redirect(url: &str) -> Response {
 }
 
 async fn settings_page(State(state): State<AppState>, jar: CookieJar) -> Response {
-    let user = match jar
-        .get("session_id")
-        .map(|c| c.value().to_string())
-        .and_then(|_| None::<()>)
-    {
-        _ => {
-            let sid = match jar.get("session_id") {
-                Some(c) => c.value().to_string(),
-                None => return redirect("/login"),
-            };
-            match get_session_user(&state.db, &sid).await {
-                Ok(Some(u)) if u.is_active && u.role == "admin" => u,
-                Ok(Some(_)) => return redirect("/"),
-                _ => return redirect("/login"),
-            }
-        }
+    let sid = match jar.get("session_id") {
+        Some(c) => c.value().to_string(),
+        None => return redirect("/login"),
+    };
+    let user = match get_session_user(&state.db, &sid).await {
+        Ok(Some(u)) if u.is_active && u.role == "admin" => u,
+        Ok(Some(_)) => return redirect("/"),
+        _ => return redirect("/login"),
     };
 
     let servers = pdns_server_repo::list_servers(&state.db).await.unwrap_or_default();

@@ -62,7 +62,7 @@ pub fn network_to_arpa(network: &str) -> Option<String> {
             return None;
         }
         let octs = addr.octets();
-        let significant = ((prefix + 7) / 8) as usize;
+        let significant = prefix.div_ceil(8) as usize;
         let reversed: Vec<String> = octs[..significant].iter().rev().map(|o| o.to_string()).collect();
         return Some(format!("{}.in-addr.arpa.", reversed.join(".")));
     }
@@ -72,7 +72,7 @@ pub fn network_to_arpa(network: &str) -> Option<String> {
         }
         let bytes = addr.octets();
         let all_nibbles: Vec<u8> = bytes.iter().flat_map(|b| [b >> 4, b & 0x0f]).collect();
-        let nibble_count = ((prefix + 3) / 4) as usize;
+        let nibble_count = prefix.div_ceil(4) as usize;
         let reversed: Vec<String> = all_nibbles[..nibble_count]
             .iter()
             .rev()

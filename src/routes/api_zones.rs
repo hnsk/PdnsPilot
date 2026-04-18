@@ -769,7 +769,7 @@ async fn lookup_reverse_zone(
         let registry = state.pdns.read();
         active
             .iter()
-            .filter(|s| q.server_id.map_or(true, |id| id == s.id))
+            .filter(|s| q.server_id.is_none_or(|id| id == s.id))
             .filter_map(|srv| registry.get(srv.id).map(|c| (srv.id, c)))
             .collect()
     };
