@@ -29,7 +29,7 @@
                 <label>New Password (leave blank to keep current)</label>
                 <input type="password" x-model="password" autocomplete="new-password">
             </div>
-            <button class="btn btn-primary" @click="saveUser()">Save Changes</button>
+            <button class="btn btn-primary" @click="saveUser()" :disabled="saving" x-text="saving ? 'Saving…' : 'Save Changes'"></button>
         </div>
     </div>
 
@@ -120,17 +120,23 @@ function userDetail() {
         password: '',
         assignedZones: JSON.parse(JSON.stringify(INITIAL_ZONES)),
         zonesDirty: false,
+        saving: false,
 
         async saveUser() {
-            const body = { role: this.role, is_active: this.isActive };
-            if (this.password) body.password = this.password;
-            const r = await fetch(`/api/users/${TARGET_USER_ID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-            if (r.ok) showToast('User saved');
-            else r.json().then(d => showToast(d.detail || 'Error', 'error'));
+            this.saving = true;
+            try {
+                const body = { role: this.role, is_active: this.isActive };
+                if (this.password) body.password = this.password;
+                const r = await fetch(`/api/users/${TARGET_USER_ID}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (r.ok) { this.password = ''; showToast('User saved'); }
+                else r.json().then(d => showToast(d.detail || 'Error', 'error'));
+            } finally {
+                this.saving = false;
+            }
         },
 
         removeZone(i) {
