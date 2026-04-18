@@ -114,7 +114,7 @@ async fn create_key(
         Some(&user.username),
         "apikey.create",
         None,
-        Some(&format!("{{\"description\":\"{description}\"}}")),
+        Some(&serde_json::json!({"description": description}).to_string()),
     )
     .await
     .ok();
