@@ -11,7 +11,7 @@ RUN rm -f src/main.rs
 COPY src ./src
 COPY migrations ./migrations
 COPY .sqlx ./.sqlx
-RUN SQLX_OFFLINE=true cargo build --release
+RUN find src -name "*.rs" -exec touch {} \; && SQLX_OFFLINE=true cargo build --release
 
 # ─── Runtime ──────────────────────────────────────────────────────────────────
 FROM alpine:3.19
