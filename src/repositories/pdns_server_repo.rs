@@ -20,19 +20,20 @@ pub async fn list_servers(db: &SqlitePool) -> anyhow::Result<Vec<PdnsServer>> {
     )
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| PdnsServer {
-            id: r.id.expect("server id is never null"),
-            name: r.name,
-            api_url: r.api_url,
-            api_key: r.api_key,
-            server_id: r.server_id,
-            is_active: r.is_active != 0,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+    rows.into_iter()
+        .map(|r| -> anyhow::Result<PdnsServer> {
+            Ok(PdnsServer {
+                id: r.id.ok_or_else(|| anyhow::anyhow!("server id unexpectedly null"))?,
+                name: r.name,
+                api_url: r.api_url,
+                api_key: r.api_key,
+                server_id: r.server_id,
+                is_active: r.is_active != 0,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
         })
-        .collect())
+        .collect::<anyhow::Result<Vec<_>>>()
 }
 
 pub async fn get_server(db: &SqlitePool, server_db_id: i64) -> anyhow::Result<Option<PdnsServer>> {

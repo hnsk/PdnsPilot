@@ -32,13 +32,16 @@ pub async fn get_user_by_username(
     )
     .fetch_optional(db)
     .await?;
-    Ok(row.map(|r| User {
-        id: r.id.expect("user id is never null"),
-        username: r.username,
-        role: r.role,
-        is_active: r.is_active != 0,
-        default_ttl: r.default_ttl,
-    }))
+    row.map(|r| -> anyhow::Result<User> {
+        Ok(User {
+            id: r.id.ok_or_else(|| anyhow::anyhow!("user id unexpectedly null"))?,
+            username: r.username,
+            role: r.role,
+            is_active: r.is_active != 0,
+            default_ttl: r.default_ttl,
+        })
+    })
+    .transpose()
 }
 
 pub async fn verify_password(
@@ -72,7 +75,7 @@ pub async fn verify_password(
     }
 
     Ok(Some(User {
-        id: row.id.expect("user id is never null"),
+        id: row.id.ok_or_else(|| anyhow::anyhow!("user id unexpectedly null"))?,
         username: row.username,
         role: row.role,
         is_active: row.is_active != 0,
@@ -181,16 +184,17 @@ pub async fn list_users(db: &SqlitePool) -> anyhow::Result<Vec<User>> {
     )
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| User {
-            id: r.id.expect("user id is never null"),
-            username: r.username,
-            role: r.role,
-            is_active: r.is_active != 0,
-            default_ttl: r.default_ttl,
+    rows.into_iter()
+        .map(|r| -> anyhow::Result<User> {
+            Ok(User {
+                id: r.id.ok_or_else(|| anyhow::anyhow!("user id unexpectedly null"))?,
+                username: r.username,
+                role: r.role,
+                is_active: r.is_active != 0,
+                default_ttl: r.default_ttl,
+            })
         })
-        .collect())
+        .collect::<anyhow::Result<Vec<_>>>()
 }
 
 pub async fn ensure_admin_exists(db: &SqlitePool, default_password: &str) -> anyhow::Result<()> {
